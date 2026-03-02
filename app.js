@@ -310,8 +310,14 @@ document.addEventListener('click', (e) => {
 function openEditPostenModal(postenId) {
   const postenObj = posten.find(p => p.id === postenId);
   if (!postenObj) return;
-  // Finde die erste Rate
-  const ersteRate = raten.filter(r => r.posten_id === postenId)
+  // Finde die aktuell gültige Rate (neueste mit start_datum <= heute)
+  const heute = new Date().toISOString().slice(0,10);
+  const aktuelleRate = raten
+    .filter(r => r.posten_id === postenId && r.start_datum <= heute)
+    .sort((a, b) => new Date(b.start_datum) - new Date(a.start_datum))[0];
+  // Finde die nächste zukünftige Rate (start_datum > heute)
+  const zukunftRate = raten
+    .filter(r => r.posten_id === postenId && r.start_datum > heute)
     .sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum))[0];
   const modalHtml = `
     <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -331,12 +337,13 @@ function openEditPostenModal(postenId) {
           <label class="text-sm">Fälligkeitsdatum:
             <input name="faelligkeitsdatum" type="date" value="${postenObj.faelligkeitsdatum || ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
-          <label class="text-sm">Startdatum der ersten Rate:
-            <input name="rate_start_datum" type="date" value="${ersteRate ? ersteRate.start_datum : ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
+          <label class="text-sm">Startdatum der aktuellen Rate:
+            <input name="rate_start_datum" type="date" value="${aktuelleRate ? aktuelleRate.start_datum : ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
           <label class="text-sm">Monatliche Rate (€):
-            <input name="rate_betrag" type="number" min="0" step="0.01" value="${ersteRate ? ersteRate.betrag : ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
+            <input name="rate_betrag" type="number" min="0" step="0.01" value="${aktuelleRate ? aktuelleRate.betrag : ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
+          ${zukunftRate ? `<div class='text-xs text-zinc-400 mt-1'>Nächste geplante Rate ab <span class='font-semibold'>${zukunftRate.start_datum}</span>: <span class='font-semibold'>${zukunftRate.betrag.toFixed(2)} €</span></div>` : ''}
           <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-4 py-2 mt-2">Speichern</button>
         </form>
       </div>
@@ -365,12 +372,12 @@ function openEditPostenModal(postenId) {
         faelligkeit_jahre,
         faelligkeitsdatum
       }).eq('id', postenId);
-      // Update erste Rate
-      if (ersteRate) {
+      // Update aktuelle Rate
+      if (aktuelleRate) {
         await supabase.from('raten').update({
           betrag: rate_betrag,
           start_datum: rate_start_datum
-        }).eq('id', ersteRate.id);
+        }).eq('id', aktuelleRate.id);
       }
       showToast('Rücklage gespeichert.', 'success');
       document.getElementById('modal-overlay').remove();
