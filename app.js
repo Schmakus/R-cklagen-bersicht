@@ -80,6 +80,8 @@ function renderDashboard() {
           const cardClass = istUeberfaellig
             ? "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-red-500/50 bg-red-900/10"
             : "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative";
+          const ziel = Number(p.ziel_betrag) || 0;
+          const fortschritt = ziel > 0 ? Math.min(100, Math.round((saldo / ziel) * 100)) : 0;
           return `
             <div class="${cardClass}" data-posten-id="${p.id}">
               <div class="flex items-center justify-between mb-2">
@@ -87,6 +89,15 @@ function renderDashboard() {
                 <button class="edit-posten-btn p-1 ml-2 text-indigo-400 hover:text-indigo-200" title="Bearbeiten">
                   <i data-lucide="edit-3" class="w-5 h-5"></i>
                 </button>
+              </div>
+              <div class="mb-2">
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-zinc-400">${saldo.toFixed(2)} € von ${ziel.toFixed(2)} €</span>
+                  <span class="text-zinc-400">${fortschritt}%</span>
+                </div>
+                <div class="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
+                  <div class="h-3 bg-emerald-600 rounded-full transition-all duration-300" style="width: ${fortschritt}%;"></div>
+                </div>
               </div>
               <div class="flex items-center gap-2 mb-4">
                 <span class="text-emerald-400 font-mono text-xl">€ ${p.ziel_betrag.toFixed(2)}</span>
