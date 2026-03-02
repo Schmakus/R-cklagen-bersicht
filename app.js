@@ -1,4 +1,17 @@
+  // ...existing code...
+  // Handler für Kontoauszug-Modal
+  // ...existing code...
 // app.js
+// --- Toast-Komponente ---
+function showToast(msg, type = "info") {
+  let toast = document.createElement("div");
+  toast.className = `fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl shadow-lg font-semibold text-sm transition-all duration-300 pointer-events-none ` +
+    (type === "error" ? "bg-red-700 text-white" : type === "success" ? "bg-emerald-600 text-white" : "bg-slate-800 text-zinc-100");
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = "0"; }, 1800);
+  setTimeout(() => { toast.remove(); }, 2200);
+}
 // SPA-Logik für Rücklagen-Planer (Phase 1: Grundstruktur & Auth)
 
 // --- Supabase Setup ---
@@ -28,15 +41,15 @@ function renderAuth() {
     const email = e.target.email.value;
     const password = e.target.password.value;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert('Login fehlgeschlagen: ' + error.message);
+    if (error) showToast('Login fehlgeschlagen: ' + error.message, 'error');
   };
   document.getElementById('register-btn').onclick = async () => {
     const email = document.querySelector('#login-form input[name="email"]').value;
     const password = document.querySelector('#login-form input[name="password"]').value;
     if (!email || !password) return alert('Bitte E-Mail und Passwort eingeben!');
     const { error } = await supabase.auth.signUp({ email, password });
-    if (error) alert('Registrierung fehlgeschlagen: ' + error.message);
-    else alert('Registrierung erfolgreich! Bitte E-Mail bestätigen und dann einloggen.');
+    if (error) showToast('Registrierung fehlgeschlagen: ' + error.message, 'error');
+    else showToast('Registrierung erfolgreich! Bitte E-Mail bestätigen und dann einloggen.', 'success');
   };
 }
 
@@ -58,19 +71,31 @@ function renderDashboard() {
         </button>
       </div>
       <div id="posten-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        ${posten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Noch keine Posten angelegt.</div>` : posten.map(p => `
-          <div class="bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative" data-posten-id="${p.id}">
-            <div class="font-semibold text-lg mb-2">${p.name}</div>
-            <div class="flex items-center gap-2 mb-4">
-              <span class="text-emerald-400 font-mono text-xl">€ ${p.ziel_betrag.toFixed(2)}</span>
+        ${posten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Noch keine Posten angelegt.</div>` : posten.map(p => {
+          // Saldo berechnen
+          const saldo = window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0;
+          // Überfällig prüfen
+          const heute = new Date().toISOString().slice(0,10);
+          const istUeberfaellig = p.faelligkeitsdatum && heute > p.faelligkeitsdatum && saldo > 0;
+          const cardClass = istUeberfaellig
+            ? "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-red-500/50 bg-red-900/10"
+            : "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative";
+          return `
+            <div class="${cardClass}" data-posten-id="${p.id}">
+              <div class="font-semibold text-lg mb-2">${p.name}</div>
+              <div class="flex items-center gap-2 mb-4">
+                <span class="text-emerald-400 font-mono text-xl">€ ${p.ziel_betrag.toFixed(2)}</span>
+              </div>
+              <div class="flex gap-2">
+                <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
+                <button class="trans-btn border border-slate-500 text-slate-300 rounded px-3 py-1 text-xs flex-1">Transaktion</button>
+                <button class="rate-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1 text-xs flex-1">Rate anpassen</button>
+                <button class="edit-posten-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1 text-xs flex-1">Bearbeiten</button>
+              </div>
             </div>
-            <div class="flex gap-2">
-              <button class="trans-btn border border-slate-500 text-slate-300 rounded px-3 py-1 text-xs flex-1">Transaktion</button>
-              <button class="rate-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1 text-xs flex-1">Rate anpassen</button>
-              <button class="edit-posten-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1 text-xs flex-1">Bearbeiten</button>
-            </div>
-          </div>
-        `).join('')}
+          `;
+        // ...existing code...
+        }).join('')}
       </div>
     </div>
   `;
@@ -105,15 +130,16 @@ function openRateModal(postenId) {
     e.preventDefault();
     const betrag = Number(e.target.betrag.value);
     const start_datum = e.target.start_datum.value;
-    if (isNaN(betrag) || betrag <= 0 || !start_datum) return alert('Ungültige Eingabe!');
-    await supabase.from('raten').insert({
-      posten_id: postenId,
-      betrag,
-      start_datum
-    });
-    document.getElementById('modal-overlay').remove();
-    await loadData();
-    renderDashboard();
+    if (isNaN(betrag) || betrag <= 0 || !start_datum) return showToast('Ungültige Eingabe!', 'error');
+    try {
+      await supabase.from('raten').insert({ posten_id: postenId, betrag, start_datum });
+      showToast('Rate gespeichert.', 'success');
+      document.getElementById('modal-overlay').remove();
+      await loadData();
+      renderDashboard();
+    } catch (err) {
+      showToast('Fehler beim Speichern der Rate.', 'error');
+    }
   };
 }
 
@@ -153,16 +179,16 @@ function openTransModal(postenId) {
     const betrag = Number(e.target.betrag.value);
     const typ = e.target.typ.value;
     const datum = e.target.datum.value;
-    if (isNaN(betrag) || betrag === 0 || !datum) return alert('Ungültige Eingabe!');
-    await supabase.from('transaktionen').insert({
-      posten_id: postenId,
-      betrag,
-      typ,
-      datum
-    });
-    document.getElementById('modal-overlay').remove();
-    await loadData();
-    renderDashboard();
+    if (isNaN(betrag) || betrag === 0 || !datum) return showToast('Ungültige Eingabe!', 'error');
+    try {
+      await supabase.from('transaktionen').insert({ posten_id: postenId, betrag, typ, datum });
+      showToast('Transaktion gespeichert.', 'success');
+      document.getElementById('modal-overlay').remove();
+      await loadData();
+      renderDashboard();
+    } catch (err) {
+      showToast('Fehler beim Speichern der Transaktion.', 'error');
+    }
   };
 }
 
@@ -234,7 +260,7 @@ function openAddPostenModal() {
     const rate_betrag = Number(e.target.rate_betrag.value);
     const rate_start_datum = e.target.rate_start_datum.value;
     if (!name || isNaN(ziel_betrag) || ziel_betrag < 0 || isNaN(faelligkeit_jahre) || faelligkeit_jahre < 1 || !faelligkeitsdatum || isNaN(rate_betrag) || rate_betrag <= 0 || !rate_start_datum) {
-      alert('Bitte alle Felder korrekt ausfüllen!');
+      showToast('Bitte alle Felder korrekt ausfüllen!', 'error');
       return;
     }
     try {
@@ -255,11 +281,12 @@ function openAddPostenModal() {
         start_datum: rate_start_datum
       });
       if (ratenErr) throw ratenErr;
+      showToast('Rücklage angelegt.', 'success');
       document.getElementById('modal-overlay').remove();
       await loadData();
       renderDashboard();
     } catch (err) {
-      alert('Fehler beim Anlegen: ' + (err.message || err));
+      showToast('Fehler beim Anlegen: ' + (err.message || err), 'error');
     }
   };
 }
@@ -320,7 +347,7 @@ function openEditPostenModal(postenId) {
     const rate_betrag = Number(e.target.rate_betrag.value);
     const rate_start_datum = e.target.rate_start_datum.value;
     if (!name || isNaN(ziel_betrag) || ziel_betrag < 0 || isNaN(faelligkeit_jahre) || faelligkeit_jahre < 1 || !faelligkeitsdatum || isNaN(rate_betrag) || rate_betrag <= 0 || !rate_start_datum) {
-      alert('Bitte alle Felder korrekt ausfüllen!');
+      showToast('Bitte alle Felder korrekt ausfüllen!', 'error');
       return;
     }
     try {
@@ -337,11 +364,12 @@ function openEditPostenModal(postenId) {
           start_datum: rate_start_datum
         }).eq('id', ersteRate.id);
       }
+      showToast('Rücklage gespeichert.', 'success');
       document.getElementById('modal-overlay').remove();
       await loadData();
       renderDashboard();
     } catch (err) {
-      alert('Fehler beim Speichern: ' + (err.message || err));
+      showToast('Fehler beim Speichern: ' + (err.message || err), 'error');
     }
   };
 }
@@ -402,6 +430,61 @@ window.init = async function init() {
 };
 
 // --- Supabase Auth Listener & App-Start ---
+// --- Kontoauszug-Modal pro Rücklage ---
+window.openKontoauszugModal = function openKontoauszugModal(postenId) {
+  const p = posten.find(x => x.id === postenId);
+  if (!p) return;
+  // Raten für diesen Posten sortiert nach Startdatum
+  const ratenList = raten.filter(r => r.posten_id === postenId)
+    .sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
+  // Transaktionen für diesen Posten sortiert nach Datum
+  const transList = transaktionen.filter(t => t.posten_id === postenId)
+    .sort((a, b) => new Date(a.datum) - new Date(b.datum));
+  // Raten als Zeitabschnitte
+  let ratenRows = [];
+  for (let i = 0; i < ratenList.length; i++) {
+    const start = ratenList[i].start_datum;
+    const end = ratenList[i+1] ? ratenList[i+1].start_datum : 'Heute';
+    ratenRows.push(`<tr><td class="py-1 text-xs">${start} – ${end}</td><td class="py-1 text-xs text-right">${ratenList[i].betrag.toFixed(2)} €</td><td></td></tr>`);
+  }
+  // Transaktionen einzeln
+  let transRows = transList.map(t => `<tr><td class="py-1 text-xs">${t.datum}</td><td class="py-1 text-xs text-right">${t.betrag.toFixed(2)} €</td><td class="py-1 text-xs">${t.typ === 'einzahlung' ? 'Einzahlung' : 'Auszahlung'}</td></tr>`);
+  // Modal-HTML
+  const modalHtml = `
+    <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div class="bg-slate-900 rounded-xl p-6 w-full max-w-md shadow-lg relative">
+        <button class="absolute top-2 right-2 text-zinc-400 hover:text-zinc-200" onclick="document.getElementById('modal-overlay').remove()">✕</button>
+        <h2 class="text-lg font-bold mb-4">Kontoauszug: ${p.name}</h2>
+        <table class="w-full text-left mb-2">
+          <thead><tr><th>Zeitraum/Datum</th><th>Betrag</th><th>Typ</th></tr></thead>
+          <tbody>
+            ${ratenRows.join('')}
+            ${transRows.join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  let modalDiv = document.createElement('div');
+  modalDiv.id = 'modal-overlay';
+  modalDiv.innerHTML = modalHtml;
+  document.body.appendChild(modalDiv);
+}
+
+// Handler für Kontoauszug-Button (global, nach Funktionsdefinition)
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-posten-id]');
+  if (card && e.target.classList.contains('show-kontoauszug-btn')) {
+    window.openKontoauszugModal(card.dataset.postenId);
+  }
+});
+// Handler für Kontoauszug-Button (jetzt wirklich am Ende, nach allen Funktionsdefinitionen)
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-posten-id]');
+  if (card && typeof window.openKontoauszugModal === 'function' && e.target.classList.contains('show-kontoauszug-btn')) {
+    window.openKontoauszugModal(card.dataset.postenId);
+  }
+});
 supabase.auth.onAuthStateChange((_event, session) => {
   if (session?.user) {
     window.init();
