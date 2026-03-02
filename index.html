@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="de" class="bg-slate-900">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rücklagen-Planer</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons via CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS Client via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7"></script>
+    <!-- ENV: Hier SUPABASE_URL & SUPABASE_ANON_KEY setzen -->
+   <script src="env.js"></script>
+    <style>
+      html, body { min-height: 100vh; }
+    </style>
+  </head>
+  <body class="bg-slate-900 text-zinc-100 min-h-screen">
+    <div id="app" class="min-h-screen flex flex-col justify-center items-center"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
