@@ -356,6 +356,9 @@ function openTransModal(postenId) {
           <label class="text-sm">Datum:
             <input name="datum" type="date" value="${new Date().toISOString().slice(0,10)}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
+          <label class="text-sm">Notiz:
+            <input name="notiz" type="text" maxlength="100" class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" placeholder="Optional..." />
+          </label>
           <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2 mt-2">Speichern</button>
         </form>
       </div>
@@ -370,9 +373,10 @@ function openTransModal(postenId) {
     const betrag = Number(e.target.betrag.value);
     const typ = e.target.typ.value;
     const datum = e.target.datum.value;
+    const notiz = e.target.notiz.value || '';
     if (isNaN(betrag) || betrag === 0 || !datum) return showToast('Ungültige Eingabe!', 'error');
     try {
-      await supabase.from('transaktionen').insert({ posten_id: postenId, betrag, typ, datum });
+      await supabase.from('transaktionen').insert({ posten_id: postenId, betrag, typ, datum, notiz });
       showToast('Transaktion gespeichert.', 'success');
       document.getElementById('modal-overlay').remove();
       await loadData();
