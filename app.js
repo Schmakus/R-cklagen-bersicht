@@ -118,9 +118,30 @@ let transaktionen = [];
  * @returns {number}
  */
 window.berechnePostenSaldo = function(postenId) {
-  // Nur gebuchte Transaktionen für diesen Posten
-  const trans = transaktionen.filter(t => t.posten_id === postenId);
+  // Berechne dynamisch alle Raten für jeden Monat im jeweiligen Zeitraum
   let saldo = 0;
+  // 1. Raten: Für jeden Zeitraum zwischen zwei Raten, für jeden Monat eine Einzahlung
+  const ratenList = raten.filter(r => r.posten_id === postenId).sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
+  let today = new Date();
+  for (let i = 0; i < ratenList.length; i++) {
+    const rate = ratenList[i];
+    const start = new Date(rate.start_datum);
+    const end = ratenList[i+1] ? new Date(ratenList[i+1].start_datum) : today;
+    let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    while (d <= end && d <= today) {
+      const buchungsTag = start.getDate();
+      const buchungsDatum = new Date(d.getFullYear(), d.getMonth(), buchungsTag);
+      if (buchungsDatum < start) {
+        d.setMonth(d.getMonth() + 1);
+        continue;
+      }
+      if (buchungsDatum > today || buchungsDatum >= end) break;
+      saldo += Number(rate.betrag);
+      d.setMonth(d.getMonth() + 1);
+    }
+  }
+  // 2. Echte Transaktionen: Ein-/Auszahlungen
+  const trans = transaktionen.filter(t => t.posten_id === postenId);
   for (const t of trans) {
     if (t.typ === 'einzahlung') saldo += Number(t.betrag);
     else if (t.typ === 'auszahlung') saldo -= Number(t.betrag);
@@ -642,58 +663,7 @@ async function loadData() {
     .in('posten_id', posten.map(p => p.id));
   transaktionen = transData || [];
 
-  // --- Automatische Buchung der Rate als monatliche Einzahlung ---
-  // Für jeden Posten: prüfe alle Raten und buche ggf. fehlende Einzahlungen für jeden Monat
-  for (const p of posten) {
-    // Alle Raten für diesen Posten, sortiert nach Startdatum
-    const ratenList = raten.filter(r => r.posten_id === p.id).sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
-    if (ratenList.length === 0) continue;
-    let today = new Date();
-    // Für jede Rate: buche für jeden Monat ab Startdatum bis zur nächsten Rate (oder heute)
-    for (let i = 0; i < ratenList.length; i++) {
-      const rate = ratenList[i];
-      const start = new Date(rate.start_datum);
-      // Enddatum ist entweder das Startdatum der nächsten Rate oder heute
-      const end = ratenList[i+1] ? new Date(ratenList[i+1].start_datum) : today;
-      // Iteriere über jeden Monat im Zeitraum [start, end)
-      let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      while (d <= end && d <= today) {
-        // Buchungstag ist immer der Tag des Monats wie im Startdatum
-        const buchungsTag = start.getDate();
-        const buchungsDatum = new Date(d.getFullYear(), d.getMonth(), buchungsTag);
-        // Die erste Buchung ist immer am Startdatum
-        if (buchungsDatum < start) {
-          // Falls der Buchungstag im aktuellen Monat < Startdatum, dann auf den nächsten Monat springen
-          d.setMonth(d.getMonth() + 1);
-          continue;
-        }
-        if (buchungsDatum > today || buchungsDatum > end) break;
-        // Prüfe, ob für diesen Monat schon eine Rate als Einzahlung gebucht wurde
-        const exists = transaktionen.some(t => t.posten_id === p.id && t.typ === 'einzahlung' && t.notiz === 'Automatische Rate' && t.datum === buchungsDatum.toISOString().slice(0,10));
-        if (!exists) {
-          const insertObj = {
-            user_id: user.id,
-            posten_id: p.id,
-            betrag: Number(rate.betrag),
-            typ: 'einzahlung',
-            datum: buchungsDatum.toISOString().slice(0,10),
-            notiz: 'Automatische Rate'
-          };
-          console.log('Auto-Insert transaktion:', insertObj);
-          try {
-            const { error } = await supabase.from('transaktionen').insert(insertObj);
-            if (error) {
-              console.error('Insert-Fehler:', error);
-            }
-          } catch (err) {
-            console.error('Insert-Exception:', err);
-          }
-        }
-        // Nächster Monat
-        d.setMonth(d.getMonth() + 1);
-      }
-    }
-  }
+  // Automatische Buchung entfällt. Raten werden nur in raten-Tabelle geführt.
 }
 
 // --- Initialisierung ---
@@ -713,12 +683,48 @@ window.init = async function init() {
 window.openKontoauszugModal = function openKontoauszugModal(postenId) {
   const p = posten.find(x => x.id === postenId);
   if (!p) return;
-  // Nur tatsächlich gebuchte Transaktionen (inkl. automatische Raten)
-  const transList = transaktionen.filter(t => t.posten_id === postenId)
-    .sort((a, b) => new Date(a.datum) - new Date(b.datum));
+  // Dynamisch: Alle Raten als monatliche Einzahlungen + echte Transaktionen
+  let buchungen = [];
+  // 1. Raten: Für jeden Zeitraum zwischen zwei Raten, für jeden Monat eine Einzahlung
+  const ratenList = raten.filter(r => r.posten_id === postenId).sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
+  let today = new Date();
+  for (let i = 0; i < ratenList.length; i++) {
+    const rate = ratenList[i];
+    const start = new Date(rate.start_datum);
+    const end = ratenList[i+1] ? new Date(ratenList[i+1].start_datum) : today;
+    let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    while (d <= end && d <= today) {
+      const buchungsTag = start.getDate();
+      const buchungsDatum = new Date(d.getFullYear(), d.getMonth(), buchungsTag);
+      if (buchungsDatum < start) {
+        d.setMonth(d.getMonth() + 1);
+        continue;
+      }
+      if (buchungsDatum > today || buchungsDatum >= end) break;
+      buchungen.push({
+        datum: buchungsDatum.toISOString().slice(0,10),
+        betrag: Number(rate.betrag),
+        typ: 'einzahlung',
+        notiz: 'Monatliche Rate'
+      });
+      d.setMonth(d.getMonth() + 1);
+    }
+  }
+  // 2. Echte Transaktionen: Ein-/Auszahlungen
+  const trans = transaktionen.filter(t => t.posten_id === postenId);
+  for (const t of trans) {
+    buchungen.push({
+      datum: t.datum,
+      betrag: Number(t.betrag),
+      typ: t.typ,
+      notiz: t.notiz || ''
+    });
+  }
+  // Sortiere alle Buchungen nach Datum
+  buchungen.sort((a, b) => new Date(a.datum) - new Date(b.datum));
   // Summenberechnung
   let summe = 0;
-  for (const t of transList) {
+  for (const t of buchungen) {
     if (t.typ === 'einzahlung') summe += Number(t.betrag);
     else if (t.typ === 'auszahlung') summe -= Number(t.betrag);
   }
@@ -730,7 +736,7 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
         <table class="w-full text-left mb-2">
           <thead><tr><th>Datum</th><th>Betrag</th><th>Typ</th><th>Notiz</th></tr></thead>
           <tbody>
-            ${transList.map(t => `<tr><td class="py-1 text-xs">${t.datum}</td><td class="py-1 text-xs text-right">${t.betrag.toFixed(2)} €</td><td class="py-1 text-xs">${t.typ === 'einzahlung' ? 'Einzahlung' : 'Auszahlung'}</td><td class="py-1 text-xs">${t.notiz || ''}</td></tr>`).join('')}
+            ${buchungen.map(t => `<tr><td class="py-1 text-xs">${t.datum}</td><td class="py-1 text-xs text-right">${t.betrag.toFixed(2)} €</td><td class="py-1 text-xs">${t.typ === 'einzahlung' ? 'Einzahlung' : 'Auszahlung'}</td><td class="py-1 text-xs">${t.notiz || ''}</td></tr>`).join('')}
           </tbody>
         </table>
         <div class="mt-2 text-right font-semibold text-zinc-200">Summe: <span class="font-mono">${summe.toFixed(2)} €</span></div>
