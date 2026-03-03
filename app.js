@@ -229,10 +229,59 @@ function openRateModal(postenId) {
     const betrag = Number(e.target.betrag.value);
     const start_datum = e.target.start_datum.value;
     if (isNaN(betrag) || betrag <= 0 || !start_datum) return showToast('Ungültige Eingabe!', 'error');
+    // Prüfe, ob Rate für dieses Datum schon existiert
+    const { data: existingRates } = await supabase.from('raten')
+      .select('*')
+      .eq('posten_id', postenId)
+      .eq('start_datum', start_datum);
     try {
-      await supabase.from('raten').insert({ posten_id: postenId, betrag, start_datum });
+      if (existingRates && existingRates.length > 0) {
+        // Überschreibe vorhandene Rate
+        await supabase.from('raten').update({ betrag }).eq('id', existingRates[0].id);
+        // Passe alle zugehörigen Transaktionen im Zeitraum dieser Rate an
+        // Finde die nächste Rate (falls vorhanden)
+        const ratenList = raten.filter(r => r.posten_id === postenId).sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
+        const idx = ratenList.findIndex(r => r.start_datum === start_datum);
+        const start = new Date(start_datum);
+        const end = ratenList[idx+1] ? new Date(ratenList[idx+1].start_datum) : new Date();
+        let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        while (d <= end && d <= new Date()) {
+          const buchungsTag = start.getDate();
+          const buchungsDatum = new Date(d.getFullYear(), d.getMonth(), buchungsTag);
+          if (buchungsDatum < start) {
+            d.setMonth(d.getMonth() + 1);
+            continue;
+          }
+          if (buchungsDatum > end || buchungsDatum > new Date()) break;
+          // Update oder Insert für diesen Monat
+          const datumStr = buchungsDatum.toISOString().slice(0,10);
+          const { data: transExist } = await supabase.from('transaktionen')
+            .select('id')
+            .eq('posten_id', postenId)
+            .eq('typ', 'einzahlung')
+            .eq('notiz', 'Automatische Rate')
+            .eq('datum', datumStr);
+          if (transExist && transExist.length > 0) {
+            await supabase.from('transaktionen').update({ betrag }).eq('id', transExist[0].id);
+          } else {
+            await supabase.from('transaktionen').insert({
+              user_id: user.id,
+              posten_id: postenId,
+              betrag,
+              typ: 'einzahlung',
+              datum: datumStr,
+              notiz: 'Automatische Rate'
+            });
+          }
+          d.setMonth(d.getMonth() + 1);
+        }
+      } else {
+        // Neue Rate anlegen
+        await supabase.from('raten').insert({ posten_id: postenId, betrag, start_datum });
+      }
       showToast('Rate gespeichert.', 'success');
       document.getElementById('modal-overlay').remove();
+      await loadData();
       await loadData();
       renderDashboard();
     } catch (err) {
@@ -381,12 +430,25 @@ function openAddPostenModal() {
       }).select();
       if (postenErr || !postenRes || !postenRes[0]) throw postenErr || new Error('Fehler beim Anlegen des Postens');
       const postenId = postenRes[0].id;
-      // 2. Erste Rate anlegen
-      const { error: ratenErr } = await supabase.from('raten').insert({
-        posten_id: postenId,
-        betrag: rate_betrag,
-        start_datum: rate_start_datum
-      });
+      // Prüfe, ob Rate für dieses Datum schon existiert
+      const { data: existingRates } = await supabase.from('raten')
+        .select('*')
+        .eq('posten_id', postenId)
+        .eq('start_datum', rate_start_datum);
+      let ratenErr = null;
+      if (existingRates && existingRates.length > 0) {
+        // Überschreibe vorhandene Rate
+        const { error } = await supabase.from('raten').update({ betrag: rate_betrag }).eq('id', existingRates[0].id);
+        ratenErr = error;
+      } else {
+        // Neue Rate anlegen
+        const { error } = await supabase.from('raten').insert({
+          posten_id: postenId,
+          betrag: rate_betrag,
+          start_datum: rate_start_datum
+        });
+        ratenErr = error;
+      }
       if (ratenErr) throw ratenErr;
       showToast('Rücklage angelegt.', 'success');
       document.getElementById('modal-overlay').remove();
@@ -455,7 +517,7 @@ function openEditPostenModal(postenId) {
   // Vorschlagslogik für Rate (wie beim Anlegen)
   setTimeout(() => {
     const zielInput = document.querySelector('#edit-posten-form input[name="ziel_betrag"]');
-    const laufzeitInput = document.querySelector('#edit-posten-form input[name="faelligkeit_jahre"]');
+    const laufzeitInput = document.querySelector('#edit-posten-form input[name="laufzeit_jahre"]');
     const rateInput = document.querySelector('#edit-posten-form input[name="rate_betrag"]');
     function updateRate() {
       const ziel = Number(zielInput.value);
@@ -499,6 +561,9 @@ function openEditPostenModal(postenId) {
       }
       showToast('Rücklage gespeichert.', 'success');
       document.getElementById('modal-overlay').remove();
+      // Erstes Laden (triggert automatische Buchung)
+      await loadData();
+      // Zweites Laden, damit alle neuen Transaktionen sicher geladen sind
       await loadData();
       renderDashboard();
     } catch (err) {
@@ -578,27 +643,34 @@ async function loadData() {
   transaktionen = transData || [];
 
   // --- Automatische Buchung der Rate als monatliche Einzahlung ---
-  // Für jeden Posten: prüfe alle aktiven Raten und buche ggf. fehlende Einzahlungen
+  // Für jeden Posten: prüfe alle Raten und buche ggf. fehlende Einzahlungen für jeden Monat
   for (const p of posten) {
     // Alle Raten für diesen Posten, sortiert nach Startdatum
     const ratenList = raten.filter(r => r.posten_id === p.id).sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
     if (ratenList.length === 0) continue;
     let today = new Date();
+    // Für jede Rate: buche für jeden Monat ab Startdatum bis zur nächsten Rate (oder heute)
     for (let i = 0; i < ratenList.length; i++) {
       const rate = ratenList[i];
       const start = new Date(rate.start_datum);
+      // Enddatum ist entweder das Startdatum der nächsten Rate oder heute
       const end = ratenList[i+1] ? new Date(ratenList[i+1].start_datum) : today;
-      // Für jeden Monat im Zeitraum [start, end):
-      let d = new Date(start);
-      while (d < end) {
+      // Iteriere über jeden Monat im Zeitraum [start, end)
+      let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      while (d <= end && d <= today) {
         // Buchungstag ist immer der Tag des Monats wie im Startdatum
         const buchungsTag = start.getDate();
         const buchungsDatum = new Date(d.getFullYear(), d.getMonth(), buchungsTag);
-        if (buchungsDatum > today) break;
+        // Die erste Buchung ist immer am Startdatum
+        if (buchungsDatum < start) {
+          // Falls der Buchungstag im aktuellen Monat < Startdatum, dann auf den nächsten Monat springen
+          d.setMonth(d.getMonth() + 1);
+          continue;
+        }
+        if (buchungsDatum > today || buchungsDatum > end) break;
         // Prüfe, ob für diesen Monat schon eine Rate als Einzahlung gebucht wurde
         const exists = transaktionen.some(t => t.posten_id === p.id && t.typ === 'einzahlung' && t.notiz === 'Automatische Rate' && t.datum === buchungsDatum.toISOString().slice(0,10));
         if (!exists) {
-          // Debug: Logge Insert-Werte
           const insertObj = {
             user_id: user.id,
             posten_id: p.id,
