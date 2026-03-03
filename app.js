@@ -732,14 +732,16 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
         notiz: 'Monatliche Rate'
       });
       // Folgemonate: immer exakt denselben Tag
-      jahr = start.getFullYear();
-      monat = start.getMonth() + 1;
+      let folgeJahr = start.getFullYear();
+      let folgeMonat = start.getMonth();
+      let folgeTag = start.getDate();
       while (true) {
-        if (monat > 11) {
-          monat = 0;
-          jahr++;
+        folgeMonat++;
+        if (folgeMonat > 11) {
+          folgeMonat = 0;
+          folgeJahr++;
         }
-        let aktuellesDatum = new Date(jahr, monat, buchungsTag);
+        let aktuellesDatum = new Date(folgeJahr, folgeMonat, folgeTag);
         if (aktuellesDatum > end || aktuellesDatum > today) break;
         buchungen.push({
           datum: aktuellesDatum.toISOString().slice(0,10),
@@ -747,7 +749,6 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
           typ: 'einzahlung',
           notiz: 'Monatliche Rate'
         });
-        monat++;
       }
     }
   // 2. Echte Transaktionen: Ein-/Auszahlungen
