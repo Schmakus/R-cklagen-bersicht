@@ -708,29 +708,44 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
   if (!p) return;
   // Dynamisch: Alle Raten als monatliche Einzahlungen + echte Transaktionen
   let buchungen = [];
-  // 1. Raten: Für jeden Zeitraum zwischen zwei Raten, für jeden Monat eine Einzahlung
+  // 1. Raten: Für jeden Zeitraum zwischen zwei Raten, für jeden Monat eine Einzahlung (Logik wie bei Saldo)
   const ratenList = raten.filter(r => r.posten_id === postenId).sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
   let today = new Date();
   for (let i = 0; i < ratenList.length; i++) {
     const rate = ratenList[i];
     const start = new Date(rate.start_datum);
-    const end = ratenList[i+1] ? new Date(ratenList[i+1].start_datum) : today;
-    let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-    while (d <= end && d <= today) {
-      const buchungsTag = start.getDate();
-      const buchungsDatum = new Date(d.getFullYear(), d.getMonth(), buchungsTag);
-      if (buchungsDatum < start) {
-        d.setMonth(d.getMonth() + 1);
-        continue;
+    let end;
+    if (ratenList[i + 1]) {
+      end = new Date(ratenList[i + 1].start_datum);
+      end.setDate(end.getDate() - 1);
+    } else {
+      end = today;
+    }
+    // Starte immer exakt am Startdatum der Rate
+    let jahr = start.getFullYear();
+    let monat = start.getMonth();
+    let buchungsTag = start.getDate();
+    let buchungsDatum = new Date(jahr, monat, buchungsTag);
+    while (buchungsDatum <= end && buchungsDatum <= today) {
+      // Immer exakt am Tag des Startdatums buchen
+      let aktuellesDatum = new Date(jahr, monat, buchungsTag);
+      if (aktuellesDatum < start) {
+        aktuellesDatum = start;
       }
-      if (buchungsDatum > today || buchungsDatum >= end) break;
+      if (aktuellesDatum > end || aktuellesDatum > today) break;
       buchungen.push({
-        datum: buchungsDatum.toISOString().slice(0,10),
+        datum: aktuellesDatum.toISOString().slice(0,10),
         betrag: Number(rate.betrag),
         typ: 'einzahlung',
         notiz: 'Monatliche Rate'
       });
-      d.setMonth(d.getMonth() + 1);
+      // Nächster Monat
+      monat++;
+      if (monat > 11) {
+        monat = 0;
+        jahr++;
+      }
+      buchungsDatum = new Date(jahr, monat, buchungsTag);
     }
   }
   // 2. Echte Transaktionen: Ein-/Auszahlungen
