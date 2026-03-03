@@ -1,3 +1,57 @@
+  // --- Delete-Button-Handler ---
+  document.addEventListener('click', async (e) => {
+    let btn = e.target.closest('.delete-posten-btn');
+    if (btn) {
+      const postenId = btn.closest('[data-posten-id]')?.dataset.postenId;
+      if (!postenId) return;
+      const postenObj = posten.find(p => p.id === postenId);
+      if (!postenObj || postenObj.name === 'Allgemein') return;
+      // Modal anzeigen
+      const saldo = window.berechnePostenSaldo(postenId);
+      const modalHtml = `
+        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" id="delete-modal-overlay">
+          <div class="bg-slate-900 rounded-xl p-6 w-full max-w-sm shadow-lg relative">
+            <button class="absolute top-2 right-2 text-zinc-400 hover:text-zinc-200" onclick="document.getElementById('delete-modal-overlay').remove()">✕</button>
+            <h2 class="text-lg font-bold mb-4">Rücklage löschen</h2>
+            <div class="mb-4">Soll die Rücklage <span class="font-semibold">${postenObj.name}</span> wirklich gelöscht werden?</div>
+            ${saldo > 0 ? `<div class="mb-4 text-red-400">Restbetrag von <span class="font-semibold">${saldo.toFixed(2)} €</span> wird automatisch in <span class="font-semibold">Allgemein</span> übertragen.</div>` : ''}
+            <div class="flex gap-2 mt-4">
+              <button id="confirm-delete-posten" class="bg-red-600 hover:bg-red-700 text-white rounded px-4 py-2 flex-1">Löschen</button>
+              <button onclick="document.getElementById('delete-modal-overlay').remove()" class="border border-slate-500 text-slate-300 rounded px-4 py-2 flex-1">Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      `;
+      // Vorheriges Modal entfernen, falls vorhanden
+      const oldModal = document.getElementById('delete-modal-overlay');
+      if (oldModal) oldModal.remove();
+      let modalDiv = document.createElement('div');
+      modalDiv.innerHTML = modalHtml;
+      document.body.appendChild(modalDiv);
+      document.getElementById('confirm-delete-posten').onclick = async () => {
+        // Umbuchung falls nötig
+        if (saldo > 0) {
+          // Finde "Allgemein"
+          const allgemein = posten.find(p => p.name === 'Allgemein');
+          if (allgemein) {
+            await supabase.from('transaktionen').insert({
+              posten_id: allgemein.id,
+              betrag: saldo,
+              typ: 'einzahlung',
+              datum: new Date().toISOString().slice(0,10),
+              notiz: `Umbuchung Restbetrag von Posten ${postenObj.name}`
+            });
+          }
+        }
+        // Lösche Posten
+        await supabase.from('posten').delete().eq('id', postenId);
+        showToast('Rücklage gelöscht.', 'success');
+        document.getElementById('delete-modal-overlay').remove();
+        await loadData();
+        renderDashboard();
+      };
+    }
+  });
   // ...existing code...
   // Handler für Kontoauszug-Modal
   // ...existing code...
@@ -88,43 +142,53 @@ function renderDashboard() {
       </div>
       <div id="posten-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
         ${posten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Noch keine Posten angelegt.</div>` : posten.map(p => {
-          // Saldo berechnen
           const saldo = window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0;
-          // Überfällig prüfen
           const heute = new Date().toISOString().slice(0,10);
           const istUeberfaellig = p.faelligkeitsdatum && heute > p.faelligkeitsdatum && saldo > 0;
-          const cardClass = istUeberfaellig
-            ? "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-red-500/50 bg-red-900/10"
-            : "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative";
           const ziel = Number(p.ziel_betrag) || 0;
           const fortschritt = ziel > 0 ? Math.min(100, Math.round((saldo / ziel) * 100)) : 0;
           const isAllgemein = p.name === 'Allgemein';
-          return `
-            <div class="${cardClass}" data-posten-id="${p.id}">
-              <div class="flex items-center justify-between mb-2">
-                <span class="font-semibold text-lg">${p.name}</span>
-                ${!isAllgemein ? `<button class="edit-posten-btn p-1 ml-2 text-indigo-400 hover:text-indigo-200" title="Bearbeiten"><i data-lucide="edit-3" class="w-5 h-5"></i></button>` : ''}
-              </div>
-              <div class="mb-2">
-                <div class="flex justify-between text-xs mb-1">
-                  <span class="text-zinc-400">${saldo.toFixed(2)} € von ${ziel.toFixed(2)} €</span>
-                  <span class="text-zinc-400">${fortschritt}%</span>
+          const cardClass = isAllgemein
+            ? "bg-slate-950 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-emerald-700/40"
+            : istUeberfaellig
+              ? "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-red-500/50 bg-red-900/10"
+              : "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative";
+          return isAllgemein
+            ? `<div class="${cardClass}" data-posten-id="${p.id}">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="font-semibold text-lg">${p.name}</span>
                 </div>
-                <div class="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
-                  <div class="h-3 bg-emerald-600 rounded-full transition-all duration-300" style="width: ${fortschritt}%;"></div>
+                <div class="mb-2">
+                  <span class="text-emerald-400 font-mono text-2xl">${saldo.toFixed(2)} €</span>
                 </div>
-              </div>
-              <div class="flex items-center gap-2 mb-4">
-                <span class="text-emerald-400 font-mono text-xl">€ ${p.ziel_betrag.toFixed(2)}</span>
-              </div>
-              <div class="flex gap-2">
-                <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
-                <button class="trans-btn border border-slate-500 text-slate-300 rounded px-3 py-1 text-xs flex-1">Transaktion</button>
-                ${!isAllgemein ? `<button class="rate-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1 text-xs flex-1">Rate anpassen</button>` : ''}
-              </div>
-            </div>
-          `;
-        // ...existing code...
+                <div class="flex gap-2">
+                  <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
+                  <button class="trans-btn border border-slate-500 text-slate-300 rounded px-3 py-1 text-xs flex-1">Transaktion</button>
+                </div>
+              </div>`
+            : `<div class="${cardClass}" data-posten-id="${p.id}">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="font-semibold text-lg">${p.name}</span>
+                  <div class="flex flex-row gap-2"> <button class="edit-posten-btn p-1 text-indigo-400 hover:text-indigo-200" title="Bearbeiten"><i data-lucide="edit-3" class="w-5 h-5"></i></button><button class="delete-posten-btn p-1 text-red-400 hover:text-red-200" title="Löschen"><i data-lucide="trash-2" class="w-5 h-5"></i></button></div>
+                </div>
+                <div class="mb-2">
+                  <div class="flex justify-between text-xs mb-1">
+                    <span class="text-zinc-400">${saldo.toFixed(2)} € von ${ziel.toFixed(2)} €</span>
+                    <span class="text-zinc-400">${fortschritt}%</span>
+                  </div>
+                  <div class="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-3 bg-emerald-600 rounded-full transition-all duration-300" style="width: ${fortschritt}%;"></div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 mb-4">
+                  <span class="text-emerald-400 font-mono text-xl">€ ${p.ziel_betrag.toFixed(2)}</span>
+                </div>
+                <div class="flex gap-2">
+                  <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
+                  <button class="trans-btn border border-slate-500 text-slate-300 rounded px-3 py-1 text-xs flex-1">Transaktion</button>
+                  <button class="rate-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1 text-xs flex-1">Rate anpassen</button>
+                </div>
+              </div>`;
         }).join('')}
       </div>
     </div>
