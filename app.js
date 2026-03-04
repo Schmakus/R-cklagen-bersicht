@@ -35,12 +35,16 @@
           const allgemein = posten.find(p => p.name === 'Allgemein');
           if (allgemein) {
             await supabase.from('transaktionen').insert({
+              user_id: user.id,
               posten_id: allgemein.id,
               betrag: saldo,
               typ: 'einzahlung',
               datum: new Date().toISOString().slice(0,10),
               notiz: `Umbuchung Restbetrag von Posten ${postenObj.name}`
             });
+            // Nach Umbuchung: Daten neu laden und Dashboard aktualisieren
+            await loadData();
+            renderDashboard();
           }
         }
         // Lösche Posten
@@ -118,45 +122,46 @@ window.berechnePostenSaldo = function(postenId) {
     .filter(r => r.posten_id === postenId)
     .sort((a, b) => new Date(a.start_datum) - new Date(b.start_datum));
 
-  if (ratenList.length === 0) return saldo;
-
-  for (let i = 0; i < ratenList.length; i++) {
-    const rate = ratenList[i];
-    const start = new Date(rate.start_datum);
-    // Enddatum: Entweder einen Tag vor der nächsten Rate, oder heute (inklusive!)
-    let end;
-    if (ratenList[i + 1]) {
-      end = new Date(ratenList[i + 1].start_datum);
-      end.setDate(end.getDate() - 1); // Bis zum Tag vor der nächsten Rate
-    } else {
-      end = today;
-    }
-
-    // Beginne mit dem ersten Buchungsdatum (immer Startdatum)
-    let jahr = start.getFullYear();
-    let monat = start.getMonth();
-    let buchungsTag = start.getDate();
-    let first = true;
-    while (true) {
-      let tageImMonat = new Date(jahr, monat + 1, 0).getDate();
-      let tatsaechlicherTag = Math.min(buchungsTag, tageImMonat);
-      let aktuellesDatum = new Date(jahr, monat, tatsaechlicherTag);
-      if (aktuellesDatum < start) {
-        // Falls z.B. 31. Februar, dann Monatsende nehmen
-        aktuellesDatum = new Date(jahr, monat + 1, 0);
+  // 1. Ratenberechnung (nur falls vorhanden)
+  if (ratenList.length > 0) {
+    for (let i = 0; i < ratenList.length; i++) {
+      const rate = ratenList[i];
+      const start = new Date(rate.start_datum);
+      // Enddatum: Entweder einen Tag vor der nächsten Rate, oder heute (inklusive!)
+      let end;
+      if (ratenList[i + 1]) {
+        end = new Date(ratenList[i + 1].start_datum);
+        end.setDate(end.getDate() - 1); // Bis zum Tag vor der nächsten Rate
+      } else {
+        end = today;
       }
-      if (aktuellesDatum > end || aktuellesDatum > today) break;
-      saldo += Number(rate.betrag);
-      // Nächster Monat
-      monat++;
-      if (monat > 11) {
-        monat = 0;
-        jahr++;
+
+      // Beginne mit dem ersten Buchungsdatum (immer Startdatum)
+      let jahr = start.getFullYear();
+      let monat = start.getMonth();
+      let buchungsTag = start.getDate();
+      let first = true;
+      while (true) {
+        let tageImMonat = new Date(jahr, monat + 1, 0).getDate();
+        let tatsaechlicherTag = Math.min(buchungsTag, tageImMonat);
+        let aktuellesDatum = new Date(jahr, monat, tatsaechlicherTag);
+        if (aktuellesDatum < start) {
+          // Falls z.B. 31. Februar, dann Monatsende nehmen
+          aktuellesDatum = new Date(jahr, monat + 1, 0);
+        }
+        if (aktuellesDatum > end || aktuellesDatum > today) break;
+        saldo += Number(rate.betrag);
+        // Nächster Monat
+        monat++;
+        if (monat > 11) {
+          monat = 0;
+          jahr++;
+        }
+        first = false;
       }
-      first = false;
     }
   }
-  // 2. Echte Transaktionen: Ein-/Auszahlungen
+  // 2. Echte Transaktionen: Ein-/Auszahlungen (immer berechnen)
   const trans = transaktionen.filter(t => t.posten_id === postenId);
   for (const t of trans) {
     if (t.typ === 'einzahlung') saldo += Number(t.betrag);
