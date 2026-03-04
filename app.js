@@ -174,8 +174,8 @@ window.berechnePostenSaldo = function(postenId) {
 function renderDashboard() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="max-w-3xl mx-auto w-full p-4">
-      <h1 class="text-2xl font-bold mb-6 text-center">Rücklagen-Dashboard</h1>
+    <div class="max-w-3xl mx-auto w-full mt-4 px-4 flex flex-col items-center">
+      <h1 class="text-2xl font-bold mb-6 text-center">Rücklagen Dashboard</h1>
       <div class="flex justify-end mb-4">
         <button id="add-posten-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2 flex items-center gap-2">
           <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='w-5 h-5'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
