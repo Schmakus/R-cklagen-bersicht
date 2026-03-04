@@ -457,6 +457,15 @@ function openAddPostenModal() {
   modalDiv.id = 'modal-overlay';
   modalDiv.innerHTML = modalHtml;
   document.body.appendChild(modalDiv);
+  // Klick außerhalb des Modal-Inhalts schließt das Modal
+  modalDiv.addEventListener('click', (e) => {
+    if (
+      e.target === modalDiv ||
+      (e.target.classList && e.target.classList.contains('fixed') && e.target.classList.contains('inset-0'))
+    ) {
+      modalDiv.remove();
+    }
+  });
   // Vorschlagslogik für Rate direkt nach dem Einfügen
   const zielInput = modalDiv.querySelector('input[name="ziel_betrag"]');
   const laufzeitInput = modalDiv.querySelector('input[name="laufzeit_jahre"]');
@@ -571,12 +580,7 @@ function openEditPostenModal(postenId) {
           <label class="text-sm">Fälligkeitsdatum:
             <input name="faelligkeitsdatum" type="date" value="${postenObj.faelligkeitsdatum || ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
-          <label class="text-sm">Startdatum der aktuellen Rate:
-            <input name="rate_start_datum" type="date" value="${aktuelleRate && aktuelleRate.start_datum ? aktuelleRate.start_datum : new Date().toISOString().slice(0,10)}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
-          </label>
-          <label class="text-sm">Monatliche Rate (€):
-            <input name="rate_betrag" type="number" min="0" step="0.01" value="${aktuelleRate && aktuelleRate.betrag ? aktuelleRate.betrag : ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
-          </label>
+          <!-- Felder für Rate werden beim Bearbeiten nicht angezeigt -->
           ${zukunftRate ? `<div class='text-xs text-zinc-400 mt-1'>Nächste geplante Rate ab <span class='font-semibold'>${zukunftRate.start_datum}</span>: <span class='font-semibold'>${zukunftRate.betrag.toFixed(2)} €</span></div>` : ''}
           <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-4 py-2 mt-2">Speichern</button>
         </form>
@@ -587,24 +591,16 @@ function openEditPostenModal(postenId) {
   modalDiv.id = 'modal-overlay';
   modalDiv.innerHTML = modalHtml;
   document.body.appendChild(modalDiv);
-  // Vorschlagslogik für Rate (wie beim Anlegen)
-  setTimeout(() => {
-    const zielInput = document.querySelector('#edit-posten-form input[name="ziel_betrag"]');
-    const laufzeitInput = document.querySelector('#edit-posten-form input[name="laufzeit_jahre"]');
-    const rateInput = document.querySelector('#edit-posten-form input[name="rate_betrag"]');
-    function updateRate() {
-      const ziel = Number(zielInput.value);
-      const jahre = Number(laufzeitInput.value);
-      if (!isNaN(ziel) && ziel > 0 && !isNaN(jahre) && jahre > 0) {
-        const vorschlag = ziel / (jahre * 12);
-        rateInput.value = vorschlag.toFixed(2);
-      }
+  // Klick außerhalb des Modal-Inhalts schließt das Modal
+  modalDiv.addEventListener('click', (e) => {
+    if (
+      e.target === modalDiv ||
+      (e.target.classList && e.target.classList.contains('fixed') && e.target.classList.contains('inset-0'))
+    ) {
+      modalDiv.remove();
     }
-    zielInput.addEventListener('input', updateRate);
-    laufzeitInput.addEventListener('input', updateRate);
-    // Nur vorschlagen, wenn keine aktuelle Rate vorhanden ist
-    if (!rateInput.value || rateInput.value === '0') updateRate();
-  }, 0);
+  });
+  // Vorschlagslogik für Rate entfernt, da Felder im Editier-Modal nicht vorhanden
   document.getElementById('edit-posten-form').onsubmit = async (e) => {
     e.preventDefault();
     const form = e.target;
