@@ -87,7 +87,6 @@ function renderAuth() {
         <input name="email" type="email" placeholder="E-Mail" required class="rounded bg-slate-900 border border-slate-700 px-3 py-2 text-zinc-100" />
         <input name="password" type="password" placeholder="Passwort" required class="rounded bg-slate-900 border border-slate-700 px-3 py-2 text-zinc-100" />
         <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2 font-semibold">Login</button>
-        <button type="button" id="register-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-4 py-2 font-semibold">Registrieren</button>
       </form>
     </div>
   `;
@@ -98,14 +97,7 @@ function renderAuth() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) showToast('Login fehlgeschlagen: ' + error.message, 'error');
   };
-  document.getElementById('register-btn').onclick = async () => {
-    const email = document.querySelector('#login-form input[name="email"]').value;
-    const password = document.querySelector('#login-form input[name="password"]').value;
-    if (!email || !password) return alert('Bitte E-Mail und Passwort eingeben!');
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) showToast('Registrierung fehlgeschlagen: ' + error.message, 'error');
-    else showToast('Registrierung erfolgreich! Bitte E-Mail bestätigen und dann einloggen.', 'success');
-  };
+  // Registrierung entfernt
 }
 
 // --- Dashboard & Posten-Logik ---
