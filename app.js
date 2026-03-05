@@ -369,8 +369,8 @@ function openTransModal(postenId) {
           </label>
           <label class="text-sm">Typ:
             <select name="typ" class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100">
-              <option value="einzahlung">Einzahlung</option>
               <option value="auszahlung">Auszahlung</option>
+              <option value="einzahlung">Einzahlung</option>
             </select>
           </label>
           <label class="text-sm">Datum:
@@ -771,7 +771,7 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
       allBuchungen.push({
         datum: formatLocalDate(aktuellesDatum),
         betrag: Number(rate.betrag),
-        typ: 'einzahlung',
+        typ: 'Rate',
         notiz: 'Monatliche Rate'
       });
       folgeMonat++;
@@ -809,7 +809,7 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
     );
     let summe = 0;
     for (const t of filtered) {
-      if (t.typ === 'einzahlung') summe += Number(t.betrag);
+      if (t.typ === 'einzahlung' || t.typ === 'Rate') summe += Number(t.betrag);
       else if (t.typ === 'auszahlung') summe -= Number(t.betrag);
     }
     // Pagination logic
@@ -870,6 +870,7 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
             <option value="alle">Alle</option>
             <option value="einzahlung">Einzahlung</option>
             <option value="auszahlung">Auszahlung</option>
+            <option value="Rate">Rate</option>
           </select>
         </div>
       </div>
@@ -888,7 +889,7 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
               <tr class="border-b border-zinc-800/50">
                 <td class="py-2 text-xs">${t.datum}</td>
                 <td class="py-2 text-xs text-right font-mono">${t.betrag.toFixed(2)} €</td>
-                <td class="py-2 text-xs text-zinc-400">${t.typ === 'einzahlung' ? 'Einzahlung' : 'Auszahlung'}</td>
+                <td class="py-2 text-xs text-zinc-400">${t.typ === 'einzahlung' ? 'Einzahlung' : t.typ === 'auszahlung' ? 'Auszahlung' : 'Rate'}</td>
                 <td class="py-2 text-xs text-zinc-500 italic">${t.notiz || ''}</td>
               </tr>`).join('')}
           </tbody>
