@@ -174,7 +174,7 @@ window.berechnePostenSaldo = function(postenId) {
 function renderDashboard() {
   const app = document.getElementById('app');
   app.innerHTML = `
-    <div class="max-w-3xl mx-auto w-full mt-4 px-4 flex flex-col items-center">
+    <div class="max-w-[88rem] mx-auto w-full mt-4 px-2 flex flex-col items-center">
       <h1 class="text-2xl font-bold mb-6 text-center">Rücklagen Dashboard</h1>
       <div class="flex justify-end mb-4">
         <button id="add-posten-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2 flex items-center gap-2">
@@ -182,7 +182,7 @@ function renderDashboard() {
           Neue Rücklage
         </button>
       </div>
-      <div id="posten-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div id="posten-grid" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 justify-center">
         ${posten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Noch keine Posten angelegt.</div>` : posten.map(p => {
           const saldo = window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0;
           const heute = new Date().toISOString().slice(0,10);
@@ -193,14 +193,14 @@ function renderDashboard() {
           const istVollErreicht = ziel > 0 && saldo >= ziel;
           const istUeberschritten = ziel > 0 && saldo >= ziel * 1.1;
           const cardClass = isAllgemein
-            ? "bg-slate-950 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-emerald-700/40"
+            ? "bg-slate-950 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-emerald-700/40"
             : istUeberschritten
-              ? "bg-red-900/30 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-red-400/70"
+              ? "bg-red-900/30 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-red-400/70"
               : istVollErreicht
-                ? "bg-emerald-900/30 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-emerald-400/70"
+                ? "bg-emerald-900/30 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-emerald-400/70"
                 : istUeberfaellig
-                  ? "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative border-2 border-red-500/50 bg-red-900/10"
-                  : "bg-slate-800/50 rounded-xl p-5 flex flex-col gap-4 shadow-md relative";
+                  ? "bg-slate-800/50 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-red-500/50 bg-red-900/10"
+                  : "bg-slate-800/50 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative";
           return isAllgemein
             ? `<div class="${cardClass}" data-posten-id="${p.id}">
                 <div class="flex items-center justify-between mb-2">
@@ -209,7 +209,7 @@ function renderDashboard() {
                 <div class="mb-2">
                   <span class="text-emerald-400 font-mono text-2xl">${saldo.toFixed(2)} €</span>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 mt-auto">
                   <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
                   <button class="trans-btn border border-slate-500 text-slate-300 rounded px-3 py-1 text-xs flex-1">Transaktion</button>
                 </div>
@@ -231,7 +231,7 @@ function renderDashboard() {
                 <div class="flex items-center gap-2 mb-4">
                   <span class="text-emerald-400 font-mono text-xl">€ ${p.ziel_betrag.toFixed(2)}</span>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 mt-auto">
                   <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
                   <button class="trans-btn border border-slate-500 text-slate-300 rounded px-3 py-1 text-xs flex-1">Transaktion</button>
                   <button class="rate-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-1 text-xs flex-1">Rate anpassen</button>
