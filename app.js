@@ -785,6 +785,7 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
   const trans = transaktionen.filter(t => t.posten_id === postenId);
   for (const t of trans) {
     allBuchungen.push({
+      id: t.id,
       datum: t.datum,
       betrag: Number(t.betrag),
       typ: t.typ,
@@ -890,7 +891,10 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
                 <td class="py-2 text-xs">${t.datum}</td>
                 <td class="py-2 text-xs text-right font-mono">${t.betrag.toFixed(2)} €</td>
                 <td class="py-2 text-xs text-zinc-400">${t.typ === 'einzahlung' ? 'Einzahlung' : t.typ === 'auszahlung' ? 'Auszahlung' : 'Rate'}</td>
-                <td class="py-2 text-xs text-zinc-500 italic">${t.notiz || ''}</td>
+                <td class="py-2 text-xs text-zinc-500 italic flex items-center gap-2">
+                  ${t.notiz || ''}
+                  ${(t.id && (t.typ === 'einzahlung' || t.typ === 'auszahlung')) ? `<button class='delete-trans-btn text-red-500 hover:text-red-700 ml-2' data-id='${t.id}' title='Entfernen'><svg xmlns='http://www.w3.org/2000/svg' class='inline w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></button>` : ''}
+                </td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -937,6 +941,27 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
     if (typSelect) typSelect.value = typ;
   }
   function attachListeners() {
+        // Lösch-Button für Transaktionen
+        modalContent.querySelectorAll('.delete-trans-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const transId = btn.getAttribute('data-id');
+            if (!transId) return;
+            if (!confirm('Diese Transaktion wirklich löschen?')) return;
+            try {
+              const { error } = await supabase.from('transaktionen').delete().eq('id', transId);
+              if (error) {
+                showToast('Fehler beim Löschen!', 'error');
+              } else {
+                showToast('Transaktion gelöscht.', 'success');
+                await loadData();
+                updateFilter();
+              }
+            } catch (err) {
+              showToast('Fehler beim Löschen!', 'error');
+            }
+          });
+        });
     modalContent.querySelector('#konto-von').addEventListener('change', () => {
       window.__kontoauszugPage = 1;
       updateFilter();
