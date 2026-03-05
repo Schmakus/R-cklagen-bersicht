@@ -183,7 +183,11 @@ function renderDashboard() {
         </button>
       </div>
       <div id="posten-grid" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 justify-center">
-        ${posten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Noch keine Posten angelegt.</div>` : posten.map(p => {
+        ${posten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Noch keine Posten angelegt.</div>` : [...posten].sort((a, b) => {
+          if (a.name === 'Allgemein') return -1;
+          if (b.name === 'Allgemein') return 1;
+          return a.name.localeCompare(b.name);
+        }).map(p => {
           const saldo = window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0;
           const heute = new Date().toISOString().slice(0,10);
           const istUeberfaellig = p.faelligkeitsdatum && heute > p.faelligkeitsdatum && saldo > 0;
