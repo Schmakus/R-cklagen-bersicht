@@ -173,10 +173,16 @@ window.berechnePostenSaldo = function(postenId) {
 // --- Editieren-Button in Card und Handler ---
 function renderDashboard() {
   const app = document.getElementById('app');
+  // Gesamtsumme aller Ansparungen inkl. "Allgemein"
+  const totalSaldo = posten.reduce((sum, p) => sum + (window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0), 0);
   app.innerHTML = `
     <div class="max-w-[88rem] mx-auto w-full mt-4 px-2 flex flex-col items-center">
       <h1 class="text-2xl font-bold mb-6 text-center">Rücklagen Dashboard</h1>
-      <div class="flex justify-end mb-4">
+      <div class="flex justify-end items-center gap-6 mb-4 w-full max-w-5xl">
+        <div class="flex items-center gap-2 text-lg font-semibold text-emerald-300 bg-slate-800/70 rounded-xl px-4 py-2">
+          <svg xmlns='http://www.w3.org/2000/svg' class='w-6 h-6 text-emerald-400' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'><circle cx='12' cy='12' r='10' /><path d='M8 12h8M12 8v8' /></svg>
+          Angespart: <span class="font-mono text-emerald-200 text-xl">${totalSaldo.toFixed(2)} €</span>
+        </div>
         <button id="add-posten-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2 flex items-center gap-2">
           <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='w-5 h-5'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
           Neue Rücklage
@@ -205,13 +211,14 @@ function renderDashboard() {
                 : istUeberfaellig
                   ? "bg-slate-800/50 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-red-500/50 bg-red-900/10"
                   : "bg-slate-800/50 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative";
+          // Neue Darstellung: Angespart groß, Ziel darunter
           return isAllgemein
             ? `<div class="${cardClass}" data-posten-id="${p.id}">
                 <div class="flex items-center justify-between mb-2">
                   <span class="font-semibold text-lg">${p.name}</span>
                 </div>
                 <div class="mb-2">
-                  <span class="text-emerald-400 font-mono text-2xl">${saldo.toFixed(2)} €</span>
+                  <span class="text-emerald-400 font-mono text-3xl">${saldo.toFixed(2)} €</span>
                 </div>
                 <div class="flex gap-2 mt-auto">
                   <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
@@ -223,17 +230,12 @@ function renderDashboard() {
                   <span class="font-semibold text-lg">${p.name}</span>
                   <div class="flex flex-row gap-2"> <button class="edit-posten-btn p-1 text-indigo-400 hover:text-indigo-200" title="Bearbeiten"><i data-lucide="edit-3" class="w-5 h-5"></i></button><button class="delete-posten-btn p-1 text-red-400 hover:text-red-200" title="Löschen"><i data-lucide="trash-2" class="w-5 h-5"></i></button></div>
                 </div>
-                <div class="mb-2">
-                  <div class="flex justify-between text-xs mb-1">
-                    <span class="text-zinc-400">${saldo.toFixed(2)} € von ${ziel.toFixed(2)} €</span>
-                    <span class="text-zinc-400">${fortschritt}%</span>
-                  </div>
-                  <div class="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
-                    <div class="h-3 bg-emerald-600 rounded-full transition-all duration-300" style="width: ${fortschritt}%;"></div>
-                  </div>
+                <div class="mb-2 flex flex-col gap-1">
+                  <span class="text-emerald-400 font-mono text-3xl">${saldo.toFixed(2)} €</span>
+                  <span class="text-zinc-400 text-xs">Angespart von Rücklage</span>
                 </div>
                 <div class="flex items-center gap-2 mb-4">
-                  <span class="text-emerald-400 font-mono text-xl">€ ${p.ziel_betrag.toFixed(2)}</span>
+                  <span class="text-emerald-200 font-mono text-lg">Ziel: ${ziel.toFixed(2)} €</span>
                 </div>
                 <div class="flex gap-2 mt-auto">
                   <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
@@ -296,7 +298,7 @@ function openRateModal(postenId) {
     e.preventDefault();
     const betrag = Number(e.target.betrag.value);
     const start_datum = e.target.start_datum.value;
-    if (isNaN(betrag) || betrag <= 0 || !start_datum) return showToast('Ungültige Eingabe!', 'error');
+    if (isNaN(betrag) || betrag < 0 || !start_datum) return showToast('Ungültige Eingabe!', 'error');
     // Prüfe, ob Rate für dieses Datum schon existiert
     const { data: existingRates } = await supabase.from('raten')
       .select('*')
@@ -776,7 +778,7 @@ window.openKontoauszugModal = function openKontoauszugModal(postenId) {
         datum: formatLocalDate(aktuellesDatum),
         betrag: Number(rate.betrag),
         typ: 'Rate',
-        notiz: 'Monatliche Rate'
+        notiz: rate.notiz || ''
       });
       folgeMonat++;
       if (folgeMonat > 11) {
