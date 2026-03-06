@@ -234,8 +234,16 @@ function renderDashboard() {
                   <span class="text-emerald-400 font-mono text-3xl">${saldo.toFixed(2)} €</span>
                   <span class="text-zinc-400 text-xs">Angespart von Rücklage</span>
                 </div>
-                <div class="flex items-center gap-2 mb-4">
+                <div class="flex items-center gap-2 mb-2">
                   <span class="text-emerald-200 font-mono text-lg">Ziel: ${ziel.toFixed(2)} €</span>
+                </div>
+                <div class="mb-4">
+                  <div class="flex justify-between text-xs mb-1">
+                    <span class="text-zinc-400">${fortschritt}%</span>
+                  </div>
+                  <div class="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-3 bg-emerald-600 rounded-full transition-all duration-300" style="width: ${fortschritt}%;"></div>
+                  </div>
                 </div>
                 <div class="flex gap-2 mt-auto">
                   <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
