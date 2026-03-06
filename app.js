@@ -234,14 +234,21 @@ function renderDashboard() {
                   <span class="text-emerald-400 font-mono text-3xl">${saldo.toFixed(2)} €</span>
                   <span class="text-zinc-400 text-xs">Angespart von Rücklage</span>
                 </div>
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="text-emerald-200 font-mono text-lg">Ziel: ${ziel.toFixed(2)} €</span>
-                  <!-- Aktuelle Rate anzeigen -->
+                <div class="flex flex-col mb-2">
+                  <div class="flex flex-row items-center gap-4 justify-center">
+                    <span class="text-emerald-200 font-mono text-lg">Ziel: ${ziel.toFixed(2)} €</span>
+                    ${(() => {
+                      const ratenList = raten.filter(r => r.posten_id === p.id);
+                      if (ratenList.length === 0) return '';
+                      const aktuelleRate = ratenList.sort((a, b) => new Date(b.start_datum) - new Date(a.start_datum))[0];
+                      return `<span class='text-indigo-400 font-mono text-sm'>Rate: ${Number(aktuelleRate.betrag).toFixed(2)} €</span>`;
+                    })()}
+                  </div>
                   ${(() => {
                     const ratenList = raten.filter(r => r.posten_id === p.id);
                     if (ratenList.length === 0) return '';
                     const aktuelleRate = ratenList.sort((a, b) => new Date(b.start_datum) - new Date(a.start_datum))[0];
-                    return `<span class='text-indigo-400 font-mono text-sm ml-2'>Rate: ${Number(aktuelleRate.betrag).toFixed(2)} €<br><span class='text-xs text-zinc-400'>ab ${aktuelleRate.start_datum}</span></span>`;
+                    return `<div class='flex flex-col items-end pr-6'><span class='text-xs text-zinc-400 mt-0.5'>ab ${aktuelleRate.start_datum}</span></div>`;
                   })()}
                 </div>
                 <div class="mb-4">
