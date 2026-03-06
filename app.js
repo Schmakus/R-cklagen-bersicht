@@ -466,8 +466,8 @@ function openAddPostenModal() {
           <label class="text-sm">Zielbetrag (€):
             <input name="ziel_betrag" type="number" min="0" step="0.01" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
-          <label class="text-sm">Laufzeit (Jahre):
-            <input name="laufzeit_jahre" type="number" min="1" step="1" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
+          <label class="text-sm">Laufzeit (Monate):
+            <input name="laufzeit_monate" type="number" min="1" step="1" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
           <label class="text-sm">Fälligkeitsdatum:
             <input name="faelligkeitsdatum" type="date" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
@@ -501,16 +501,15 @@ function openAddPostenModal() {
   });
   // Vorschlagslogik für Rate direkt nach dem Einfügen
   const zielInput = modalDiv.querySelector('input[name="ziel_betrag"]');
-  const laufzeitInput = modalDiv.querySelector('input[name="laufzeit_jahre"]');
+  const laufzeitInput = modalDiv.querySelector('input[name="laufzeit_monate"]');
   const rateInput = modalDiv.querySelector('input[name="rate_betrag"]');
   function updateRate() {
     const ziel = Number(zielInput.value);
-    const jahre = Number(laufzeitInput.value);
+    const monate = Number(laufzeitInput.value);
     if (
       zielInput.value !== '' && laufzeitInput.value !== '' &&
-      !isNaN(ziel) && ziel > 0 && !isNaN(jahre) && jahre > 0
+      !isNaN(ziel) && ziel > 0 && !isNaN(monate) && monate > 0
     ) {
-      const monate = jahre * 12;
       const vorschlag = monate > 0 ? ziel / monate : 0;
       rateInput.value = vorschlag.toFixed(2);
     } else {
@@ -606,8 +605,8 @@ function openEditPostenModal(postenId) {
           <label class="text-sm">Zielbetrag (€):
             <input name="ziel_betrag" type="number" min="0" step="0.01" value="${postenObj.ziel_betrag}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
-          <label class="text-sm">Laufzeit (Jahre):
-            <input name="laufzeit_jahre" type="number" min="1" step="1" value="${postenObj.laufzeit_jahre || postenObj.faelligkeit_jahre || ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
+          <label class="text-sm">Laufzeit (Monate):
+            <input name="laufzeit_monate" type="number" min="1" step="1" value="${postenObj.laufzeit_monate || postenObj.laufzeit_jahre || postenObj.faelligkeit_jahre || ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
           <label class="text-sm">Fälligkeitsdatum:
             <input name="faelligkeitsdatum" type="date" value="${postenObj.faelligkeitsdatum || ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
