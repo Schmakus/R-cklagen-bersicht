@@ -173,12 +173,28 @@ window.berechnePostenSaldo = function(postenId) {
 // --- Editieren-Button in Card und Handler ---
 function renderDashboard() {
   const app = document.getElementById('app');
+  const filterValue = (window.postenTitleFilter || '').trim().toLowerCase();
+  const sortedPosten = [...posten].sort((a, b) => {
+    if (a.name === 'Allgemein') return -1;
+    if (b.name === 'Allgemein') return 1;
+    return a.name.localeCompare(b.name);
+  });
+  const filteredPosten = sortedPosten.filter((p) => {
+    if (p.name === 'Allgemein') return true;
+    if (!filterValue) return true;
+    return String(p.name || '').toLowerCase().includes(filterValue);
+  });
+  const filterSuggestions = [...new Set(
+    posten
+      .filter(p => p.name && p.name !== 'Allgemein')
+      .map(p => p.name)
+  )].sort((a, b) => a.localeCompare(b));
   // Gesamtsumme aller Ansparungen inkl. "Allgemein"
   const totalSaldo = posten.reduce((sum, p) => sum + (window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0), 0);
   app.innerHTML = `
     <div class="max-w-[88rem] mx-auto w-full mt-4 px-2 flex flex-col items-center">
       <h1 class="text-2xl font-bold mb-6 text-center">Rücklagen Dashboard</h1>
-      <div class="flex justify-end items-center gap-6 mb-4 w-full max-w-5xl">
+      <div class="flex flex-wrap justify-center items-center gap-4 mb-4 w-full max-w-5xl">
         <div class="flex items-center gap-2 text-lg font-semibold text-emerald-300 bg-slate-800/70 rounded-xl px-4 py-2">
           <svg xmlns='http://www.w3.org/2000/svg' class='w-6 h-6 text-emerald-400' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'><circle cx='12' cy='12' r='10' /><path d='M8 12h8M12 8v8' /></svg>
           Angespart: <span class="font-mono text-emerald-200 text-xl">${totalSaldo.toFixed(2)} €</span>
@@ -188,12 +204,24 @@ function renderDashboard() {
           Neue Rücklage
         </button>
       </div>
+      <div class="w-full max-w-5xl mb-5 flex justify-center">
+        <div class="w-full max-w-md">
+          <label for="posten-title-filter" class="block text-xs text-zinc-400 mb-1">Filter nach Titel (Rücklage/Kredit)</label>
+          <input
+            id="posten-title-filter"
+            list="posten-title-suggestions"
+            type="text"
+            value="${(window.postenTitleFilter || '').replace(/"/g, '&quot;')}"
+            placeholder="z.B. Auto, Urlaub, Kredit"
+            class="w-full rounded bg-slate-800 border border-zinc-700 px-3 py-2 text-zinc-100"
+          />
+          <datalist id="posten-title-suggestions">
+            ${filterSuggestions.map(name => `<option value="${String(name).replace(/"/g, '&quot;')}"></option>`).join('')}
+          </datalist>
+        </div>
+      </div>
       <div id="posten-grid" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 justify-center">
-        ${posten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Noch keine Posten angelegt.</div>` : [...posten].sort((a, b) => {
-          if (a.name === 'Allgemein') return -1;
-          if (b.name === 'Allgemein') return 1;
-          return a.name.localeCompare(b.name);
-        }).map(p => {
+        ${filteredPosten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Keine passenden Posten gefunden.</div>` : filteredPosten.map(p => {
           const saldo = window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0;
           const heute = new Date().toISOString().slice(0,10);
           const istUeberfaellig = p.faelligkeitsdatum && heute > p.faelligkeitsdatum && saldo > 0;
@@ -303,6 +331,22 @@ function renderDashboard() {
       </div>
     </div>
   `;
+  const filterInput = document.getElementById('posten-title-filter');
+  if (filterInput) {
+    // Fokus und Cursor-Position wiederherstellen nach Re-Render
+    if (window._filterRestoreFocus) {
+      filterInput.focus();
+      const pos = window._filterCursorPos ?? filterInput.value.length;
+      filterInput.setSelectionRange(pos, pos);
+      window._filterRestoreFocus = false;
+    }
+    filterInput.addEventListener('input', (e) => {
+      window.postenTitleFilter = e.target.value || '';
+      window._filterRestoreFocus = true;
+      window._filterCursorPos = e.target.selectionStart;
+      renderDashboard();
+    });
+  }
   // Nach dem vollständigen Rendern: Lucide Icons ersetzen
   if (window.lucide && window.lucide.createIcons) {
     window.lucide.createIcons();
