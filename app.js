@@ -189,6 +189,15 @@ function renderDashboard() {
       .filter(p => p.name && p.name !== 'Allgemein')
       .map(p => p.name)
   )].sort((a, b) => a.localeCompare(b));
+  // Konto-Filter (Multiselect)
+  const KONTO_OPTIONS = ['Rücklagen', 'Zweckgebunden', 'Sparen'];
+  if (!window.kontoFilter || window.kontoFilter.length === 0) {
+    window.kontoFilter = [...KONTO_OPTIONS];
+  }
+  const kontoFilteredPosten = filteredPosten.filter(p => {
+    if (p.name === 'Allgemein') return true;
+    return window.kontoFilter.includes(p.konto || 'Rücklagen');
+  });
   // Gesamtsumme aller Ansparungen inkl. "Allgemein"
   const totalSaldo = posten.reduce((sum, p) => sum + (window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0), 0);
   app.innerHTML = `
@@ -204,9 +213,9 @@ function renderDashboard() {
           Neue Rücklage
         </button>
       </div>
-      <div class="w-full max-w-5xl mb-5 flex justify-center">
-        <div class="w-full max-w-md">
-          <label for="posten-title-filter" class="block text-xs text-zinc-400 mb-1">Filter nach Titel (Rücklage/Kredit)</label>
+      <div class="w-full max-w-5xl mb-5 flex flex-wrap justify-center gap-4">
+        <div class="flex-1 min-w-[200px] max-w-md">
+          <label for="posten-title-filter" class="block text-xs text-zinc-400 mb-1">Filter nach Titel</label>
           <input
             id="posten-title-filter"
             list="posten-title-suggestions"
@@ -219,9 +228,20 @@ function renderDashboard() {
             ${filterSuggestions.map(name => `<option value="${String(name).replace(/"/g, '&quot;')}"></option>`).join('')}
           </datalist>
         </div>
+        <div class="flex-shrink-0">
+          <span class="block text-xs text-zinc-400 mb-1">Konto</span>
+          <div class="flex gap-2">
+            ${KONTO_OPTIONS.map(k => {
+              const isActive = window.kontoFilter.includes(k);
+              return `<button type="button" class="konto-filter-btn px-3 py-1.5 rounded text-xs font-semibold border transition-all ${
+                isActive ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-zinc-700 text-zinc-400'
+              }" data-konto="${k}">${k}</button>`;
+            }).join('')}
+          </div>
+        </div>
       </div>
       <div id="posten-grid" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 justify-center">
-        ${filteredPosten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Keine passenden Posten gefunden.</div>` : filteredPosten.map(p => {
+        ${kontoFilteredPosten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Keine passenden Posten gefunden.</div>` : kontoFilteredPosten.map(p => {
           const saldo = window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0;
           const heute = new Date().toISOString().slice(0,10);
           const istUeberfaellig = p.faelligkeitsdatum && heute > p.faelligkeitsdatum && saldo > 0;
@@ -333,7 +353,6 @@ function renderDashboard() {
   `;
   const filterInput = document.getElementById('posten-title-filter');
   if (filterInput) {
-    // Fokus und Cursor-Position wiederherstellen nach Re-Render
     if (window._filterRestoreFocus) {
       filterInput.focus();
       const pos = window._filterCursorPos ?? filterInput.value.length;
@@ -347,6 +366,19 @@ function renderDashboard() {
       renderDashboard();
     });
   }
+  document.querySelectorAll('.konto-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const konto = btn.dataset.konto;
+      if (window.kontoFilter.includes(konto)) {
+        if (window.kontoFilter.length > 1) {
+          window.kontoFilter = window.kontoFilter.filter(k => k !== konto);
+        }
+      } else {
+        window.kontoFilter = [...window.kontoFilter, konto];
+      }
+      renderDashboard();
+    });
+  });
   // Nach dem vollständigen Rendern: Lucide Icons ersetzen
   if (window.lucide && window.lucide.createIcons) {
     window.lucide.createIcons();
@@ -557,6 +589,13 @@ function openAddPostenModal() {
               <input name="kredit_betrag" type="number" min="0.01" step="0.01" class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
             </label>
           </div>
+          <label class="text-sm">Konto:
+            <select name="konto" class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100">
+              <option value="Rücklagen" selected>Rücklagen</option>
+              <option value="Zweckgebunden">Zweckgebunden</option>
+              <option value="Sparen">Sparen</option>
+            </select>
+          </label>
           <label class="text-sm">Laufzeit (Monate):
             <input name="laufzeit_monate" type="number" min="1" step="1" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
@@ -690,7 +729,8 @@ function openAddPostenModal() {
         laufzeit_monate,
         faelligkeitsdatum,
         typ: isKredit ? 'kredit' : 'ruecklage',
-        kredit_betrag: isKredit ? kredit_betrag : null
+        kredit_betrag: isKredit ? kredit_betrag : null,
+        konto: form.elements['konto']?.value || 'Rücklagen'
       }).select();
       if (postenErr || !postenRes || !postenRes[0]) throw postenErr || new Error('Fehler beim Anlegen des Postens');
       const postenId = postenRes[0].id;
@@ -749,6 +789,13 @@ function openEditPostenModal(postenId) {
           <label class="text-sm">Name:
             <input name="name" type="text" value="${postenObj.name}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
+          <label class="text-sm">Konto:
+            <select name="konto" class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100">
+              <option value="Rücklagen" ${(postenObj.konto || 'Rücklagen') === 'Rücklagen' ? 'selected' : ''}>Rücklagen</option>
+              <option value="Zweckgebunden" ${postenObj.konto === 'Zweckgebunden' ? 'selected' : ''}>Zweckgebunden</option>
+              <option value="Sparen" ${postenObj.konto === 'Sparen' ? 'selected' : ''}>Sparen</option>
+            </select>
+          </label>
           <label class="text-sm">Zielbetrag (€):
             <input name="ziel_betrag" type="number" min="0" step="0.01" value="${postenObj.ziel_betrag}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
@@ -792,11 +839,13 @@ function openEditPostenModal(postenId) {
       return;
     }
     try {
+      const konto = form.elements['konto']?.value || 'Rücklagen';
       await supabase.from('posten').update({
         name,
         ziel_betrag,
         laufzeit_monate,
-        faelligkeitsdatum
+        faelligkeitsdatum,
+        konto
       }).eq('id', postenId);
       // Rate wird im Editier-Modal nicht bearbeitet
       showToast('Rücklage gespeichert.', 'success');

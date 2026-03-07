@@ -11,7 +11,8 @@ create table posten (
   faelligkeitsdatum date,
   created_at timestamptz default now(),
   typ text not null default 'ruecklage',
-  kredit_betrag numeric(12,2)
+  kredit_betrag numeric(12,2),
+  konto text not null default 'Rücklagen'
 );
 
 create table raten (

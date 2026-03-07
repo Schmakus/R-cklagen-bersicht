@@ -16,7 +16,7 @@ Du bist ein Senior Full-Stack Engineer mit Fokus auf **Minimalist Web Engineerin
 ## 2. Datenbank-Schema (Supabase)
 Tabellen und Spalten müssen exakt so implementiert werden:
 
-- **posten:** `id` (uuid), `user_id`, `name` (text), `ziel_betrag` (numeric), `faelligkeit_jahre` (int), `created_at` (timestamp).
+- **posten:** `id` (uuid), `user_id`, `name` (text), `ziel_betrag` (numeric), `laufzeit_monate` (int), `faelligkeitsdatum` (date), `created_at` (timestamp), `typ` ('ruecklage'|'kredit'), `kredit_betrag` (numeric), `konto` ('Rücklagen'|'Zweckgebunden'|'Sparen').
 - **raten:** `id`, `posten_id` (fk), `betrag` (numeric), `start_datum` (date).
 - **transaktionen:** `id`, `posten_id` (fk), `betrag` (numeric), `typ` ('einzahlung'|'auszahlung'), `datum` (date), `notiz` (text).
 
