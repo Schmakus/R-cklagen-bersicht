@@ -435,8 +435,15 @@ function renderDashboard() {
                     const prognose = saldo + (rate * verblMonate);
                     const fLabel = `${String(naechste.tag).padStart(2,'0')}. ${MONAT_NAMEN_K[naechste.monat-1]}`;
                     if (saldo >= benoetigtBetrag) {
+                      if (rate > empfohleneRateJahr + 0.01) {
+                        return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Bereit für ${fLabel} ✓</div><div class='text-xs text-amber-400 text-center mb-2'>Rate zu hoch — ${empfohleneRateJahr.toFixed(2)} €/Mon. würden reichen</div>`;
+                      }
                       return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Bereit für ${fLabel} ✓</div>`;
                     } else if (prognose >= benoetigtBetrag) {
+                      // Prüfen ob Rate langfristig zu hoch ist (> Jahresbedarf / 12)
+                      if (rate > empfohleneRateJahr + 0.01) {
+                        return `<div class='text-xs text-emerald-400 text-center mb-2'>Rate reicht für ${fLabel} (${verblMonate} Mon.)</div><div class='text-xs text-amber-400 text-center mb-2'>Rate zu hoch — ${empfohleneRateJahr.toFixed(2)} €/Mon. würden reichen</div>`;
+                      }
                       return `<div class='text-xs text-emerald-400 text-center mb-2'>Rate reicht für ${fLabel} (${verblMonate} Mon.)</div>`;
                     } else if (rateReichtLangfristig) {
                       const fehlbetrag = Math.ceil((benoetigtBetrag - prognose) * 100) / 100;
@@ -446,7 +453,12 @@ function renderDashboard() {
                     }
                   }
                   // Fallback: einfache Prognose
-                  if (ziel > 0 && saldo >= ziel) return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Ziel erreicht ✓</div>`;
+                  if (ziel > 0 && saldo >= ziel) {
+                    if (rate > 0) {
+                      return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Ziel erreicht ✓</div><div class='text-xs text-amber-400 text-center mb-2'>Rate kann reduziert oder gestoppt werden</div>`;
+                    }
+                    return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Ziel erreicht ✓</div>`;
+                  }
                   if (ziel > 0 && rate > 0) {
                     const rem = ziel - saldo;
                     const mon = Math.ceil(rem / rate);
