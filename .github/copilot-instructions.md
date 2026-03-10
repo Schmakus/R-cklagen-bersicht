@@ -16,7 +16,8 @@ Du bist ein Senior Full-Stack Engineer mit Fokus auf **Minimalist Web Engineerin
 ## 2. Datenbank-Schema (Supabase)
 Tabellen und Spalten müssen exakt so implementiert werden:
 
-- **posten:** `id` (uuid), `user_id`, `name` (text), `ziel_betrag` (numeric), `laufzeit_monate` (int), `faelligkeit_tag` (smallint 1-31), `faelligkeit_monat` (smallint 1-12), `created_at` (timestamp), `typ` ('ruecklage'|'kredit'), `kredit_betrag` (numeric), `konto` ('Rücklagen'|'Zweckgebunden'|'Sparen'), `archiviert` (boolean, default false).
+- **posten:** `id` (uuid), `user_id`, `name` (text), `ziel_betrag` (numeric), `laufzeit_monate` (int), `created_at` (timestamp), `typ` ('ruecklage'|'kredit'), `kredit_betrag` (numeric), `konto` ('Rücklagen'|'Zweckgebunden'|'Sparen'), `archiviert` (boolean, default false).
+- **faelligkeiten:** `id` (uuid), `posten_id` (fk), `tag` (smallint 1-31), `monat` (smallint 1-12), `betrag` (numeric). Mehrere Fälligkeiten pro Posten möglich (z.B. quartalsweise).
 - **raten:** `id`, `posten_id` (fk), `betrag` (numeric), `start_datum` (date).
 - **transaktionen:** `id`, `posten_id` (fk), `betrag` (numeric), `typ` ('einzahlung'|'auszahlung'), `datum` (date), `notiz` (text).
 
@@ -54,7 +55,7 @@ Orientierung am modernen "Dark-Slate" Dashboard-Look.
 - **Transaktions-Modal:** Auswahl von Datum, Betrag und Typ (Einzahlung/Auszahlung).
 
 ### Dynamische Zustände (Warnsystem)
-- **Überfällig-Markierung:** Wenn im aktuellen Jahr `Heute > konstruiertes Datum aus faelligkeit_tag/faelligkeit_monat` UND `Saldo > 0`.
+- **Überfällig-Markierung:** Wenn eine Fälligkeit aus der `faelligkeiten`-Tabelle im aktuellen Jahr überschritten ist UND der Saldo den benötigten Betrag nicht deckt.
 - **Visuelles Signal:** Die Kachel wird rötlich hervorgehoben (`border-red-500/50` oder `bg-red-900/10`).
 
 ---

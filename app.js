@@ -108,6 +108,7 @@ function renderAuth() {
 let posten = [];
 let raten = [];
 let transaktionen = [];
+let faelligkeiten = [];
 
 /**
  * Berechnet den aktuellen Saldo eines Postens anhand aller gebuchten Transaktionen (inkl. automatischer Raten)
@@ -277,13 +278,16 @@ function renderDashboard() {
       <div id="posten-grid" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 justify-center">
         ${archivFilteredPosten.length === 0 ? `<div class="col-span-2 text-center text-zinc-500">Keine passenden Posten gefunden.</div>` : archivFilteredPosten.map(p => {
           const saldo = window.berechnePostenSaldo ? window.berechnePostenSaldo(p.id) : 0;
+          const postenFaelligkeiten = faelligkeiten.filter(f => f.posten_id === p.id);
           const istUeberfaellig = (() => {
-            if (!p.faelligkeit_tag || !p.faelligkeit_monat || saldo <= 0) return false;
+            if (postenFaelligkeiten.length === 0) return false;
             const now = new Date();
-            const maxTag = new Date(now.getFullYear(), p.faelligkeit_monat, 0).getDate();
-            const tag = Math.min(p.faelligkeit_tag, maxTag);
-            const deadline = new Date(now.getFullYear(), p.faelligkeit_monat - 1, tag);
-            return now > deadline;
+            return postenFaelligkeiten.some(f => {
+              const maxTag = new Date(now.getFullYear(), f.monat, 0).getDate();
+              const tag = Math.min(f.tag, maxTag);
+              const deadline = new Date(now.getFullYear(), f.monat - 1, tag);
+              return now > deadline && saldo < Number(f.betrag);
+            });
           })();
           const ziel = Number(p.ziel_betrag) || 0;
           const isKredit = p.typ === 'kredit';
@@ -339,10 +343,11 @@ function renderDashboard() {
                   ${(() => {
                     const MONAT_NAMEN = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
                     let parts = [];
-                    if (p.faelligkeit_tag && p.faelligkeit_monat) {
-                      const dd = String(p.faelligkeit_tag).padStart(2, '0');
-                      const monName = MONAT_NAMEN[p.faelligkeit_monat - 1] || '';
-                      parts.push(`Fällig am <span class='font-semibold'>${dd}. ${monName}</span>`);
+                    if (postenFaelligkeiten.length > 0) {
+                      const fTexte = postenFaelligkeiten
+                        .sort((a, b) => a.monat - b.monat || a.tag - b.tag)
+                        .map(f => `${String(f.tag).padStart(2,'0')}. ${MONAT_NAMEN[f.monat-1]} (${Number(f.betrag).toFixed(0)} €)`);
+                      parts.push(`Fällig: <span class='font-semibold'>${fTexte.join(', ')}</span>`);
                     }
                     if (p.laufzeit_monate) {
                       parts.push(`Laufzeit: <span class='font-semibold'>${p.laufzeit_monate}</span> Mon.`);
@@ -384,22 +389,60 @@ function renderDashboard() {
                 </div>
                 ${(() => {
                   const rList = raten.filter(r => r.posten_id === p.id);
-                  if (rList.length === 0) return '';
-                  const aRate = rList.sort((a, b) => new Date(b.start_datum) - new Date(a.start_datum))[0];
-                  const rate = Number(aRate.betrag);
-                  if (rate <= 0) return '';
+                  const aRate = rList.length > 0 ? rList.sort((a, b) => new Date(b.start_datum) - new Date(a.start_datum))[0] : null;
+                  const rate = aRate ? Number(aRate.betrag) : 0;
+                  // Kredit: einfache Prognose
                   if (isKredit) {
                     if (saldo >= 0) return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Abbezahlt ✓</div>`;
-                    const rem = Math.abs(saldo);
-                    const mon = Math.ceil(rem / rate);
-                    return `<div class='text-xs text-zinc-400 text-center mb-2'>Abbezahlt in ~${mon} Mon.</div>`;
-                  } else {
-                    if (ziel <= 0) return '';
-                    if (saldo >= ziel) return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Ziel erreicht ✓</div>`;
+                    if (rate > 0) {
+                      const rem = Math.abs(saldo);
+                      const mon = Math.ceil(rem / rate);
+                      return `<div class='text-xs text-zinc-400 text-center mb-2'>Abbezahlt in ~${mon} Mon.</div>`;
+                    }
+                    return '';
+                  }
+                  // Rücklage: Fälligkeiten-Prognose
+                  if (postenFaelligkeiten.length > 0 && rate > 0) {
+                    const now = new Date();
+                    const MONAT_NAMEN_K = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+                    // Nächste Fälligkeit finden (im aktuellen oder nächsten Jahr)
+                    const sorted = [...postenFaelligkeiten].sort((a, b) => a.monat - b.monat || a.tag - b.tag);
+                    let naechste = null;
+                    let naechsteDate = null;
+                    for (const f of sorted) {
+                      const maxTag = new Date(now.getFullYear(), f.monat, 0).getDate();
+                      const d = new Date(now.getFullYear(), f.monat - 1, Math.min(f.tag, maxTag));
+                      if (d > now) { naechste = f; naechsteDate = d; break; }
+                    }
+                    if (!naechste) {
+                      const f = sorted[0];
+                      const maxTag = new Date(now.getFullYear() + 1, f.monat, 0).getDate();
+                      naechsteDate = new Date(now.getFullYear() + 1, f.monat - 1, Math.min(f.tag, maxTag));
+                      naechste = f;
+                    }
+                    const diffMs = naechsteDate - now;
+                    const verblMonate = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
+                    const benoetigtBetrag = Number(naechste.betrag);
+                    const prognose = saldo + (rate * verblMonate);
+                    const fehlbetrag = benoetigtBetrag - prognose;
+                    const empfohleneRate = verblMonate > 0 ? Math.ceil(((benoetigtBetrag - saldo) / verblMonate) * 100) / 100 : benoetigtBetrag;
+                    const fLabel = `${String(naechste.tag).padStart(2,'0')}. ${MONAT_NAMEN_K[naechste.monat-1]}`;
+                    if (saldo >= benoetigtBetrag) {
+                      return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Bereit für ${fLabel} ✓</div>`;
+                    } else if (prognose >= benoetigtBetrag) {
+                      return `<div class='text-xs text-emerald-400 text-center mb-2'>Rate reicht für ${fLabel} (${verblMonate} Mon.)</div>`;
+                    } else {
+                      return `<div class='text-xs text-amber-400 text-center mb-2'>Rate zu niedrig für ${fLabel} — Empfehlung: ${empfohleneRate.toFixed(2)} €/Mon.</div>`;
+                    }
+                  }
+                  // Fallback: einfache Prognose
+                  if (ziel > 0 && saldo >= ziel) return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Ziel erreicht ✓</div>`;
+                  if (ziel > 0 && rate > 0) {
                     const rem = ziel - saldo;
                     const mon = Math.ceil(rem / rate);
                     return `<div class='text-xs text-zinc-400 text-center mb-2'>Ziel in ~${mon} Mon.</div>`;
                   }
+                  return '';
                 })()}
                 <div class="flex gap-2 mt-auto">
                   <button class="show-kontoauszug-btn border border-emerald-600 text-emerald-400 rounded px-3 py-1 text-xs flex-1">Kontoauszug</button>
@@ -665,17 +708,9 @@ function openAddPostenModal() {
           <label class="text-sm">Laufzeit (Monate):
             <input name="laufzeit_monate" type="number" min="1" step="1" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
-          <div class="text-sm">Fälligkeit (Tag & Monat):
-            <div class="flex gap-2 mt-1">
-              <input name="faelligkeit_tag" type="number" min="1" max="31" placeholder="Tag" required class="w-20 rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
-              <select name="faelligkeit_monat" required class="flex-1 rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100">
-                <option value="">Monat...</option>
-                <option value="1">Januar</option><option value="2">Februar</option><option value="3">März</option>
-                <option value="4">April</option><option value="5">Mai</option><option value="6">Juni</option>
-                <option value="7">Juli</option><option value="8">August</option><option value="9">September</option>
-                <option value="10">Oktober</option><option value="11">November</option><option value="12">Dezember</option>
-              </select>
-            </div>
+          <div class="text-sm">Fälligkeiten:
+            <div id="faelligkeiten-list" class="flex flex-col gap-2 mt-1"></div>
+            <button type="button" id="add-faelligkeit-btn" class="mt-1 text-xs text-emerald-400 hover:text-emerald-200">+ Fälligkeit hinzufügen</button>
           </div>
           <div id="keine-rate-toggle-row" class="hidden items-center justify-between py-1">
             <span class="text-sm text-zinc-300">Keine monatliche Rate</span>
@@ -747,6 +782,45 @@ function openAddPostenModal() {
     document.getElementById('rate-inputs').classList.toggle('hidden', cb.checked);
   };
 
+  // --- Fälligkeiten dynamisch verwalten ---
+  let addFaelligkeiten = [{ tag: '', monat: '', betrag: '' }];
+  function renderAddFaelligkeiten() {
+    const list = document.getElementById('faelligkeiten-list');
+    if (!list) return;
+    list.innerHTML = addFaelligkeiten.map((f, i) => `
+      <div class="flex gap-1 items-center">
+        <input type="number" min="1" max="31" placeholder="Tag" value="${f.tag}" data-fi="${i}" data-field="tag" class="faellig-input w-14 rounded bg-slate-800 border border-zinc-700 px-1 py-1 text-zinc-100 text-xs" />
+        <select data-fi="${i}" data-field="monat" class="faellig-input flex-1 rounded bg-slate-800 border border-zinc-700 px-1 py-1 text-zinc-100 text-xs">
+          <option value="">Mon.</option>
+          ${[['1','Jan'],['2','Feb'],['3','Mär'],['4','Apr'],['5','Mai'],['6','Jun'],['7','Jul'],['8','Aug'],['9','Sep'],['10','Okt'],['11','Nov'],['12','Dez']].map(([v,l]) => `<option value="${v}" ${String(f.monat)===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <input type="number" min="0" step="0.01" placeholder="€" value="${f.betrag}" data-fi="${i}" data-field="betrag" class="faellig-input w-20 rounded bg-slate-800 border border-zinc-700 px-1 py-1 text-zinc-100 text-xs" />
+        ${addFaelligkeiten.length > 1 ? `<button type="button" class="remove-faelligkeit-btn text-red-400 hover:text-red-200 text-sm px-1" data-fi="${i}">✕</button>` : ''}
+      </div>
+    `).join('');
+    list.querySelectorAll('.faellig-input').forEach(el => {
+      el.addEventListener('input', () => {
+        const idx = Number(el.dataset.fi);
+        addFaelligkeiten[idx][el.dataset.field] = el.value;
+      });
+      el.addEventListener('change', () => {
+        const idx = Number(el.dataset.fi);
+        addFaelligkeiten[idx][el.dataset.field] = el.value;
+      });
+    });
+    list.querySelectorAll('.remove-faelligkeit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        addFaelligkeiten.splice(Number(btn.dataset.fi), 1);
+        renderAddFaelligkeiten();
+      });
+    });
+  }
+  document.getElementById('add-faelligkeit-btn')?.addEventListener('click', () => {
+    addFaelligkeiten.push({ tag: '', monat: '', betrag: '' });
+    renderAddFaelligkeiten();
+  });
+  renderAddFaelligkeiten();
+
   const zielInput = modalDiv.querySelector('input[name="ziel_betrag"]');
   const kreditInput = modalDiv.querySelector('input[name="kredit_betrag"]');
   const laufzeitInput = modalDiv.querySelector('input[name="laufzeit_monate"]');
@@ -775,10 +849,10 @@ function openAddPostenModal() {
     const form = e.target;
     const name = form.elements['name']?.value?.trim() || '';
     const laufzeit_monate = Number(form.elements['laufzeit_monate']?.value);
-    const faelligkeit_tag = Number(form.elements['faelligkeit_tag']?.value);
-    const faelligkeit_monat = Number(form.elements['faelligkeit_monat']?.value);
     const isKredit = currentTyp === 'kredit';
-    if (!name || isNaN(laufzeit_monate) || laufzeit_monate < 1 || isNaN(faelligkeit_tag) || faelligkeit_tag < 1 || faelligkeit_tag > 31 || isNaN(faelligkeit_monat) || faelligkeit_monat < 1 || faelligkeit_monat > 12) {
+    // Fälligkeiten validieren
+    const validFaelligkeiten = addFaelligkeiten.filter(f => f.tag && f.monat && f.betrag);
+    if (!name || isNaN(laufzeit_monate) || laufzeit_monate < 1) {
       showToast('Bitte alle Pflichtfelder ausfüllen!', 'error');
       return;
     }
@@ -803,14 +877,23 @@ function openAddPostenModal() {
         name,
         ziel_betrag: isKredit ? kredit_betrag : ziel_betrag,
         laufzeit_monate,
-        faelligkeit_tag,
-        faelligkeit_monat,
         typ: isKredit ? 'kredit' : 'ruecklage',
         kredit_betrag: isKredit ? kredit_betrag : null,
         konto: form.elements['konto']?.value || 'Rücklagen'
       }).select();
       if (postenErr || !postenRes || !postenRes[0]) throw postenErr || new Error('Fehler beim Anlegen des Postens');
       const postenId = postenRes[0].id;
+      // Fälligkeiten speichern
+      if (validFaelligkeiten.length > 0) {
+        await supabase.from('faelligkeiten').insert(
+          validFaelligkeiten.map(f => ({
+            posten_id: postenId,
+            tag: Number(f.tag),
+            monat: Number(f.monat),
+            betrag: Number(f.betrag)
+          }))
+        );
+      }
       // Bei Kredit: Initiale Auszahlung (Kreditbetrag) anlegen
       if (isKredit) {
         await supabase.from('transaktionen').insert({
@@ -879,14 +962,9 @@ function openEditPostenModal(postenId) {
           <label class="text-sm">Laufzeit (Monate):
             <input name="laufzeit_monate" type="number" min="1" step="1" value="${postenObj.laufzeit_monate || postenObj.faelligkeit_jahre || ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
-          <div class="text-sm">Fälligkeit (Tag & Monat):
-            <div class="flex gap-2 mt-1">
-              <input name="faelligkeit_tag" type="number" min="1" max="31" value="${postenObj.faelligkeit_tag || ''}" placeholder="Tag" required class="w-20 rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
-              <select name="faelligkeit_monat" required class="flex-1 rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100">
-                <option value="">Monat...</option>
-                ${[['1','Januar'],['2','Februar'],['3','März'],['4','April'],['5','Mai'],['6','Juni'],['7','Juli'],['8','August'],['9','September'],['10','Oktober'],['11','November'],['12','Dezember']].map(([v,l]) => `<option value="${v}" ${Number(postenObj.faelligkeit_monat) === Number(v) ? 'selected' : ''}>${l}</option>`).join('')}
-              </select>
-            </div>
+          <div class="text-sm">Fälligkeiten:
+            <div id="edit-faelligkeiten-list" class="flex flex-col gap-2 mt-1"></div>
+            <button type="button" id="edit-add-faelligkeit-btn" class="mt-1 text-xs text-emerald-400 hover:text-emerald-200">+ Fälligkeit hinzufügen</button>
           </div>
           <!-- Felder für Rate werden beim Bearbeiten nicht angezeigt -->
           ${zukunftRate ? `<div class='text-xs text-zinc-400 mt-1'>Nächste geplante Rate ab <span class='font-semibold'>${zukunftRate.start_datum}</span>: <span class='font-semibold'>${zukunftRate.betrag.toFixed(2)} €</span></div>` : ''}
@@ -908,30 +986,77 @@ function openEditPostenModal(postenId) {
       modalDiv.remove();
     }
   });
-  // Vorschlagslogik für Rate entfernt, da Felder im Editier-Modal nicht vorhanden
+  // Fälligkeiten dynamisch verwalten (Edit)
+  let editFaelligkeiten = faelligkeiten
+    .filter(f => f.posten_id === postenId)
+    .map(f => ({ id: f.id, tag: String(f.tag), monat: String(f.monat), betrag: String(f.betrag) }));
+  if (editFaelligkeiten.length === 0) editFaelligkeiten = [{ tag: '', monat: '', betrag: '' }];
+  function renderEditFaelligkeiten() {
+    const list = document.getElementById('edit-faelligkeiten-list');
+    if (!list) return;
+    list.innerHTML = editFaelligkeiten.map((f, i) => `
+      <div class="flex gap-1 items-center">
+        <input type="number" min="1" max="31" placeholder="Tag" value="${f.tag}" data-fi="${i}" data-field="tag" class="edit-faellig-input w-14 rounded bg-slate-800 border border-zinc-700 px-1 py-1 text-zinc-100 text-xs" />
+        <select data-fi="${i}" data-field="monat" class="edit-faellig-input flex-1 rounded bg-slate-800 border border-zinc-700 px-1 py-1 text-zinc-100 text-xs">
+          <option value="">Mon.</option>
+          ${[['1','Jan'],['2','Feb'],['3','Mär'],['4','Apr'],['5','Mai'],['6','Jun'],['7','Jul'],['8','Aug'],['9','Sep'],['10','Okt'],['11','Nov'],['12','Dez']].map(([v,l]) => `<option value="${v}" ${String(f.monat)===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <input type="number" min="0" step="0.01" placeholder="€" value="${f.betrag}" data-fi="${i}" data-field="betrag" class="edit-faellig-input w-20 rounded bg-slate-800 border border-zinc-700 px-1 py-1 text-zinc-100 text-xs" />
+        ${editFaelligkeiten.length > 1 ? `<button type="button" class="edit-remove-faelligkeit-btn text-red-400 hover:text-red-200 text-sm px-1" data-fi="${i}">✕</button>` : ''}
+      </div>
+    `).join('');
+    list.querySelectorAll('.edit-faellig-input').forEach(el => {
+      el.addEventListener('input', () => {
+        editFaelligkeiten[Number(el.dataset.fi)][el.dataset.field] = el.value;
+      });
+      el.addEventListener('change', () => {
+        editFaelligkeiten[Number(el.dataset.fi)][el.dataset.field] = el.value;
+      });
+    });
+    list.querySelectorAll('.edit-remove-faelligkeit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        editFaelligkeiten.splice(Number(btn.dataset.fi), 1);
+        renderEditFaelligkeiten();
+      });
+    });
+  }
+  document.getElementById('edit-add-faelligkeit-btn')?.addEventListener('click', () => {
+    editFaelligkeiten.push({ tag: '', monat: '', betrag: '' });
+    renderEditFaelligkeiten();
+  });
+  renderEditFaelligkeiten();
+
   document.getElementById('edit-posten-form').onsubmit = async (e) => {
     e.preventDefault();
     const form = e.target;
     const name = form.elements['name']?.value?.trim() || '';
     const ziel_betrag = Number(form.elements['ziel_betrag']?.value);
     const laufzeit_monate = Number(form.elements['laufzeit_monate']?.value);
-    const faelligkeit_tag = Number(form.elements['faelligkeit_tag']?.value);
-    const faelligkeit_monat = Number(form.elements['faelligkeit_monat']?.value);
-    // Nur Felder validieren, die im Editier-Modal sichtbar sind
-    if (!name || isNaN(ziel_betrag) || ziel_betrag < 0 || isNaN(laufzeit_monate) || laufzeit_monate < 1 || isNaN(faelligkeit_tag) || faelligkeit_tag < 1 || faelligkeit_tag > 31 || isNaN(faelligkeit_monat) || faelligkeit_monat < 1 || faelligkeit_monat > 12) {
+    if (!name || isNaN(ziel_betrag) || ziel_betrag < 0 || isNaN(laufzeit_monate) || laufzeit_monate < 1) {
       showToast('Bitte alle Felder korrekt ausfüllen!', 'error');
       return;
     }
+    const validEditFaelligkeiten = editFaelligkeiten.filter(f => f.tag && f.monat && f.betrag);
     try {
       const konto = form.elements['konto']?.value || 'Rücklagen';
       await supabase.from('posten').update({
         name,
         ziel_betrag,
         laufzeit_monate,
-        faelligkeit_tag,
-        faelligkeit_monat,
         konto
       }).eq('id', postenId);
+      // Fälligkeiten: Alle löschen und neu anlegen
+      await supabase.from('faelligkeiten').delete().eq('posten_id', postenId);
+      if (validEditFaelligkeiten.length > 0) {
+        await supabase.from('faelligkeiten').insert(
+          validEditFaelligkeiten.map(f => ({
+            posten_id: postenId,
+            tag: Number(f.tag),
+            monat: Number(f.monat),
+            betrag: Number(f.betrag)
+          }))
+        );
+      }
       // Rate wird im Editier-Modal nicht bearbeitet
       showToast('Rücklage gespeichert.', 'success');
       document.getElementById('modal-overlay').remove();
@@ -1028,6 +1153,12 @@ async function loadData() {
     .select('*')
     .in('posten_id', posten.map(p => p.id));
   raten = ratenData || [];
+  // Fälligkeiten
+  const { data: faelligkeitenData } = await supabase
+    .from('faelligkeiten')
+    .select('*')
+    .in('posten_id', posten.map(p => p.id));
+  faelligkeiten = faelligkeitenData || [];
   // Transaktionen
   const { data: transData } = await supabase
     .from('transaktionen')
