@@ -289,9 +289,13 @@ function renderDashboard() {
               return now > deadline && saldo < Number(f.betrag);
             });
           })();
-          const ziel = Number(p.ziel_betrag) || 0;
           const isKredit = p.typ === 'kredit';
           const kredit_betrag = Number(p.kredit_betrag) || 0;
+          // Gesamtfälligkeit: Summe aller Fälligkeiten, Fallback auf ziel_betrag
+          const jahresFaelligkeiten = postenFaelligkeiten.reduce((s, f) => s + Number(f.betrag), 0);
+          const ziel = postenFaelligkeiten.length > 0
+            ? jahresFaelligkeiten
+            : (Number(p.ziel_betrag) || 0);
           // Fortschritt: Kredit = Rückzahlungsfortschritt, Rücklage = Saldo/Ziel
           let fortschritt = 0;
           if (isKredit) {
@@ -310,12 +314,12 @@ function renderDashboard() {
               ? "bg-emerald-900/20 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-emerald-500/50"
               : isKredit
                 ? "bg-orange-900/10 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-orange-500/50"
-                : istUeberschritten
-                  ? "bg-red-900/30 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-red-400/70"
-                  : istVollErreicht
-                    ? "bg-emerald-900/30 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-emerald-400/70"
-                    : istUeberfaellig
-                      ? "bg-slate-800/50 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-red-500/50 bg-red-900/10"
+                : istUeberfaellig
+                  ? "bg-red-900/20 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-red-500/60"
+                  : istUeberschritten
+                    ? "bg-amber-900/15 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-amber-400/60"
+                    : istVollErreicht
+                      ? "bg-emerald-900/30 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative border-2 border-emerald-400/70"
                       : "bg-slate-800/50 rounded-xl p-5 flex flex-col justify-between h-full shadow-md relative";
           // Neue Darstellung: Angespart groß, Ziel darunter
           return isAllgemein
@@ -344,6 +348,7 @@ function renderDashboard() {
                     const MONAT_NAMEN = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
                     let parts = [];
                     if (postenFaelligkeiten.length > 0) {
+                      parts.push(`Gesamt: <span class='font-semibold text-emerald-300'>${ziel.toFixed(2)} €</span>`);
                       const fTexte = postenFaelligkeiten
                         .sort((a, b) => a.monat - b.monat || a.tag - b.tag)
                         .map(f => `${String(f.tag).padStart(2,'0')}. ${MONAT_NAMEN[f.monat-1]} (${Number(f.betrag).toFixed(0)} €)`);
@@ -364,7 +369,7 @@ function renderDashboard() {
                 </div>
                 <div class="flex flex-col mb-2">
                   <div class="flex flex-row items-center gap-4 justify-center">
-                    <span class="text-emerald-200 font-mono text-base">${isKredit ? 'Kredit: ' + kredit_betrag.toFixed(2) + ' €' : 'Ziel: ' + ziel.toFixed(2) + ' €'}</span>
+                    <span class="text-emerald-200 font-mono text-base">${isKredit ? 'Kredit: ' + kredit_betrag.toFixed(2) + ' €' : (postenFaelligkeiten.length > 0 ? 'Fällig/Jahr: ' + jahresFaelligkeiten.toFixed(2) + ' €' : 'Ziel: ' + ziel.toFixed(2) + ' €')}</span>
                     ${(() => {
                       const ratenList = raten.filter(r => r.posten_id === p.id);
                       if (ratenList.length === 0) return '';
@@ -698,6 +703,10 @@ function openAddPostenModal() {
               <input name="ziel_betrag" type="number" min="0" step="0.01" class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
             </label>
           </div>
+          <div id="field-gesamt-faelligkeit" class="hidden">
+            <div class="text-sm text-zinc-300">Gesamtfälligkeit: <span id="gesamt-faelligkeit-value" class="font-mono text-emerald-300 font-semibold">0.00 €</span></div>
+            <div class="text-xs text-zinc-500 mt-0.5">Berechnet aus Fälligkeiten × Laufzeit</div>
+          </div>
           <div id="field-kredit-betrag" class="hidden">
             <label class="text-sm">Kreditbetrag (€):
               <input name="kredit_betrag" type="number" min="0.01" step="0.01" class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
@@ -807,22 +816,26 @@ function openAddPostenModal() {
       el.addEventListener('input', () => {
         const idx = Number(el.dataset.fi);
         addFaelligkeiten[idx][el.dataset.field] = el.value;
+        updateGesamtFaelligkeit();
       });
       el.addEventListener('change', () => {
         const idx = Number(el.dataset.fi);
         addFaelligkeiten[idx][el.dataset.field] = el.value;
+        updateGesamtFaelligkeit();
       });
     });
     list.querySelectorAll('.remove-faelligkeit-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         addFaelligkeiten.splice(Number(btn.dataset.fi), 1);
         renderAddFaelligkeiten();
+        updateGesamtFaelligkeit();
       });
     });
   }
   document.getElementById('add-faelligkeit-btn')?.addEventListener('click', () => {
     addFaelligkeiten.push({ tag: '', monat: '', betrag: '' });
     renderAddFaelligkeiten();
+    updateGesamtFaelligkeit();
   });
   renderAddFaelligkeiten();
 
@@ -831,15 +844,40 @@ function openAddPostenModal() {
   const laufzeitInput = modalDiv.querySelector('input[name="laufzeit_monate"]');
   const rateInput = modalDiv.querySelector('input[name="rate_betrag"]');
 
+  function updateGesamtFaelligkeit() {
+    const validF = addFaelligkeiten.filter(f => f.tag && f.monat && f.betrag);
+    const laufzeit = Number(laufzeitInput.value) || 0;
+    const hasFaelligkeiten = validF.length > 0;
+    const gesamtDiv = document.getElementById('field-gesamt-faelligkeit');
+    const zielDiv = document.getElementById('field-ziel-betrag');
+    if (currentTyp === 'kredit') {
+      gesamtDiv.classList.add('hidden');
+      zielDiv.classList.add('hidden');
+    } else if (hasFaelligkeiten) {
+      const gesamt = validF.reduce((s, f) => s + Number(f.betrag), 0);
+      document.getElementById('gesamt-faelligkeit-value').textContent = gesamt.toFixed(2) + ' €';
+      gesamtDiv.classList.remove('hidden');
+      zielDiv.classList.add('hidden');
+    } else {
+      gesamtDiv.classList.add('hidden');
+      zielDiv.classList.remove('hidden');
+    }
+    updateRate();
+  }
+
   function updateRate() {
     const isKredit = currentTyp === 'kredit';
-    const referenceInput = isKredit ? kreditInput : zielInput;
-    const ziel = Number(referenceInput.value);
+    const validF = addFaelligkeiten.filter(f => f.tag && f.monat && f.betrag);
     const monate = Number(laufzeitInput.value);
-    if (
-      referenceInput.value !== '' && laufzeitInput.value !== '' &&
-      !isNaN(ziel) && ziel > 0 && !isNaN(monate) && monate > 0
-    ) {
+    let ziel = 0;
+    if (isKredit) {
+      ziel = Number(kreditInput.value);
+    } else if (validF.length > 0) {
+      ziel = validF.reduce((s, f) => s + Number(f.betrag), 0);
+    } else {
+      ziel = Number(zielInput.value);
+    }
+    if (!isNaN(ziel) && ziel > 0 && !isNaN(monate) && monate > 0) {
       rateInput.value = (ziel / monate).toFixed(2);
     } else {
       rateInput.value = '';
@@ -847,7 +885,7 @@ function openAddPostenModal() {
   }
   zielInput.addEventListener('input', updateRate);
   kreditInput.addEventListener('input', updateRate);
-  laufzeitInput.addEventListener('input', updateRate);
+  laufzeitInput.addEventListener('input', () => { updateGesamtFaelligkeit(); });
 
   document.getElementById('add-posten-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -870,10 +908,15 @@ function openAddPostenModal() {
         return;
       }
     } else {
-      ziel_betrag = Number(form.elements['ziel_betrag']?.value);
-      if (isNaN(ziel_betrag) || ziel_betrag < 0) {
-        showToast('Bitte einen gültigen Zielbetrag eingeben!', 'error');
-        return;
+      // Gesamtfälligkeit aus Fälligkeiten berechnen oder manuellen Zielbetrag verwenden
+      if (validFaelligkeiten.length > 0) {
+        ziel_betrag = validFaelligkeiten.reduce((s, f) => s + Number(f.betrag), 0);
+      } else {
+        ziel_betrag = Number(form.elements['ziel_betrag']?.value);
+        if (isNaN(ziel_betrag) || ziel_betrag < 0) {
+          showToast('Bitte einen gültigen Zielbetrag eingeben!', 'error');
+          return;
+        }
       }
     }
     try {
@@ -961,9 +1004,15 @@ function openEditPostenModal(postenId) {
               <option value="Sparen" ${postenObj.konto === 'Sparen' ? 'selected' : ''}>Sparen</option>
             </select>
           </label>
-          <label class="text-sm">Zielbetrag (€):
-            <input name="ziel_betrag" type="number" min="0" step="0.01" value="${postenObj.ziel_betrag}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
-          </label>
+          <div id="edit-field-ziel-betrag">
+            <label class="text-sm">Zielbetrag (€):
+              <input name="ziel_betrag" type="number" min="0" step="0.01" value="${postenObj.ziel_betrag}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
+            </label>
+          </div>
+          <div id="edit-field-gesamt-faelligkeit" class="hidden">
+            <div class="text-sm text-zinc-300">Gesamtfälligkeit: <span id="edit-gesamt-faelligkeit-value" class="font-mono text-emerald-300 font-semibold">0.00 €</span></div>
+            <div class="text-xs text-zinc-500 mt-0.5">Berechnet aus Fälligkeiten × Laufzeit</div>
+          </div>
           <label class="text-sm">Laufzeit (Monate):
             <input name="laufzeit_monate" type="number" min="1" step="1" value="${postenObj.laufzeit_monate || postenObj.faelligkeit_jahre || ''}" required class="mt-1 w-full rounded bg-slate-800 border border-zinc-700 px-2 py-1 text-zinc-100" />
           </label>
@@ -1013,35 +1062,65 @@ function openEditPostenModal(postenId) {
     list.querySelectorAll('.edit-faellig-input').forEach(el => {
       el.addEventListener('input', () => {
         editFaelligkeiten[Number(el.dataset.fi)][el.dataset.field] = el.value;
+        updateEditGesamtFaelligkeit();
       });
       el.addEventListener('change', () => {
         editFaelligkeiten[Number(el.dataset.fi)][el.dataset.field] = el.value;
+        updateEditGesamtFaelligkeit();
       });
     });
     list.querySelectorAll('.edit-remove-faelligkeit-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         editFaelligkeiten.splice(Number(btn.dataset.fi), 1);
         renderEditFaelligkeiten();
+        updateEditGesamtFaelligkeit();
       });
     });
   }
   document.getElementById('edit-add-faelligkeit-btn')?.addEventListener('click', () => {
     editFaelligkeiten.push({ tag: '', monat: '', betrag: '' });
     renderEditFaelligkeiten();
+    updateEditGesamtFaelligkeit();
   });
   renderEditFaelligkeiten();
+
+  const editLaufzeitInput = modalDiv.querySelector('input[name="laufzeit_monate"]');
+  function updateEditGesamtFaelligkeit() {
+    const validF = editFaelligkeiten.filter(f => f.tag && f.monat && f.betrag);
+    const laufzeit = Number(editLaufzeitInput.value) || 0;
+    const hasFaelligkeiten = validF.length > 0;
+    const gesamtDiv = document.getElementById('edit-field-gesamt-faelligkeit');
+    const zielDiv = document.getElementById('edit-field-ziel-betrag');
+    if (hasFaelligkeiten) {
+      const gesamt = validF.reduce((s, f) => s + Number(f.betrag), 0);
+      document.getElementById('edit-gesamt-faelligkeit-value').textContent = gesamt.toFixed(2) + ' €';
+      gesamtDiv.classList.remove('hidden');
+      zielDiv.classList.add('hidden');
+    } else {
+      gesamtDiv.classList.add('hidden');
+      zielDiv.classList.remove('hidden');
+    }
+  }
+  editLaufzeitInput.addEventListener('input', updateEditGesamtFaelligkeit);
+  updateEditGesamtFaelligkeit();
 
   document.getElementById('edit-posten-form').onsubmit = async (e) => {
     e.preventDefault();
     const form = e.target;
     const name = form.elements['name']?.value?.trim() || '';
-    const ziel_betrag = Number(form.elements['ziel_betrag']?.value);
     const laufzeit_monate = Number(form.elements['laufzeit_monate']?.value);
+    const validEditFaelligkeiten = editFaelligkeiten.filter(f => f.tag && f.monat && f.betrag);
+    // Gesamtfälligkeit aus Fälligkeiten berechnen oder manuellen Zielbetrag verwenden
+    let ziel_betrag;
+    if (validEditFaelligkeiten.length > 0) {
+      ziel_betrag = validEditFaelligkeiten.reduce((s, f) => s + Number(f.betrag), 0);
+    } else {
+      ziel_betrag = Number(form.elements['ziel_betrag']?.value);
+    }
     if (!name || isNaN(ziel_betrag) || ziel_betrag < 0 || isNaN(laufzeit_monate) || laufzeit_monate < 1) {
       showToast('Bitte alle Felder korrekt ausfüllen!', 'error');
       return;
     }
-    const validEditFaelligkeiten = editFaelligkeiten.filter(f => f.tag && f.monat && f.betrag);
     try {
       const konto = form.elements['konto']?.value || 'Rücklagen';
       await supabase.from('posten').update({
