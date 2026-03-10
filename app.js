@@ -282,12 +282,31 @@ function renderDashboard() {
           const istUeberfaellig = (() => {
             if (postenFaelligkeiten.length === 0) return false;
             const now = new Date();
-            return postenFaelligkeiten.some(f => {
+            // Nächste kommende Fälligkeit finden
+            const sorted = [...postenFaelligkeiten].sort((a, b) => a.monat - b.monat || a.tag - b.tag);
+            let naechste = null;
+            let naechsteDate = null;
+            for (const f of sorted) {
               const maxTag = new Date(now.getFullYear(), f.monat, 0).getDate();
-              const tag = Math.min(f.tag, maxTag);
-              const deadline = new Date(now.getFullYear(), f.monat - 1, tag);
-              return now > deadline && saldo < Number(f.betrag);
-            });
+              const d = new Date(now.getFullYear(), f.monat - 1, Math.min(f.tag, maxTag));
+              if (d > now) { naechste = f; naechsteDate = d; break; }
+            }
+            if (!naechste) {
+              const f = sorted[0];
+              const maxTag = new Date(now.getFullYear() + 1, f.monat, 0).getDate();
+              naechsteDate = new Date(now.getFullYear() + 1, f.monat - 1, Math.min(f.tag, maxTag));
+              naechste = f;
+            }
+            // Aktuelle Rate ermitteln
+            const postenRaten = raten.filter(r => r.posten_id === p.id);
+            const aktRate = postenRaten.length > 0
+              ? Number(postenRaten.sort((a, b) => new Date(b.start_datum) - new Date(a.start_datum))[0].betrag)
+              : 0;
+            const diffMs = naechsteDate - now;
+            const verblMonate = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
+            const prognose = saldo + (aktRate * verblMonate);
+            // Nur rot, wenn die Rate bis zur nächsten Fälligkeit NICHT reicht
+            return prognose < Number(naechste.betrag);
           })();
           const isKredit = p.typ === 'kredit';
           const kredit_betrag = Number(p.kredit_betrag) || 0;
