@@ -402,10 +402,14 @@ function renderDashboard() {
                     return '';
                   }
                   // Rücklage: Fälligkeiten-Prognose
-                  if (postenFaelligkeiten.length > 0 && rate > 0) {
+                  if (postenFaelligkeiten.length > 0) {
                     const now = new Date();
                     const MONAT_NAMEN_K = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-                    // Nächste Fälligkeit finden (im aktuellen oder nächsten Jahr)
+                    // Jahresbedarf & empfohlene Rate
+                    const jahresBedarf = postenFaelligkeiten.reduce((s, f) => s + Number(f.betrag), 0);
+                    const empfohleneRateJahr = Math.ceil((jahresBedarf / 12) * 100) / 100;
+                    const rateReichtLangfristig = rate >= empfohleneRateJahr - 0.01;
+                    // Nächste Fälligkeit finden
                     const sorted = [...postenFaelligkeiten].sort((a, b) => a.monat - b.monat || a.tag - b.tag);
                     let naechste = null;
                     let naechsteDate = null;
@@ -424,15 +428,16 @@ function renderDashboard() {
                     const verblMonate = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
                     const benoetigtBetrag = Number(naechste.betrag);
                     const prognose = saldo + (rate * verblMonate);
-                    const fehlbetrag = benoetigtBetrag - prognose;
-                    const empfohleneRate = verblMonate > 0 ? Math.ceil(((benoetigtBetrag - saldo) / verblMonate) * 100) / 100 : benoetigtBetrag;
                     const fLabel = `${String(naechste.tag).padStart(2,'0')}. ${MONAT_NAMEN_K[naechste.monat-1]}`;
                     if (saldo >= benoetigtBetrag) {
                       return `<div class='text-xs text-emerald-400 text-center mb-2 font-semibold'>Bereit für ${fLabel} ✓</div>`;
                     } else if (prognose >= benoetigtBetrag) {
                       return `<div class='text-xs text-emerald-400 text-center mb-2'>Rate reicht für ${fLabel} (${verblMonate} Mon.)</div>`;
+                    } else if (rateReichtLangfristig) {
+                      const fehlbetrag = Math.ceil((benoetigtBetrag - prognose) * 100) / 100;
+                      return `<div class='text-xs text-amber-400 text-center mb-2'>Rate langfristig OK — Einzahlung von ${fehlbetrag.toFixed(2)} € nötig bis ${fLabel}</div>`;
                     } else {
-                      return `<div class='text-xs text-amber-400 text-center mb-2'>Rate zu niedrig für ${fLabel} — Empfehlung: ${empfohleneRate.toFixed(2)} €/Mon.</div>`;
+                      return `<div class='text-xs text-amber-400 text-center mb-2'>Rate anpassen auf ${empfohleneRateJahr.toFixed(2)} €/Mon. empfohlen (${fLabel})</div>`;
                     }
                   }
                   // Fallback: einfache Prognose
