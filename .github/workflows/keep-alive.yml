@@ -1,0 +1,32 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Runs every Monday at 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  keep-alive:
+    name: Ping Supabase DB
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send keep-alive request
+        run: |
+          response=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            -X PATCH \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/keep_alive?id=eq.00000000-0000-0000-0000-000000000001" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d "{\"pinged_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+
+          echo "HTTP Status: $response"
+
+          if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
+            echo "Supabase keep-alive ping successful (HTTP $response)."
+          else
+            echo "Keep-alive ping failed (HTTP $response)."
+            exit 1
+          fi

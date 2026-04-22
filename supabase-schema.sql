@@ -57,3 +57,14 @@ create policy "User can manage their own transaktionen" on transaktionen for all
 );
 -- Einzigartigkeit für "Allgemein" pro Nutzer erzwingen
 ALTER TABLE posten ADD CONSTRAINT unique_user_allgemein UNIQUE (user_id, name);
+
+-- Keep-alive table (accessed via service role, no RLS needed)
+create table keep_alive (
+  id uuid primary key default '00000000-0000-0000-0000-000000000001',
+  pinged_at timestamptz not null default now()
+);
+
+-- Seed the single row that the GitHub Action will PATCH
+insert into keep_alive (id, pinged_at)
+values ('00000000-0000-0000-0000-000000000001', now())
+on conflict (id) do nothing;
